@@ -21,7 +21,7 @@
     <artifactId>parent-pom</artifactId>
     <version>1.11.4</version>
   </parent>
-  <groupId>eu.de4a</groupId>
+  <groupId>eu.de4a.ial</groupId>
   <artifactId>ial-parent-pom</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
@@ -129,26 +129,11 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-      <dependency>
-        <groupId>com.helger</groupId>
-        <artifactId>ph-poi</artifactId>
-        <version>5.3.1</version>
-      </dependency>
-      <dependency>
-        <groupId>com.helger</groupId>
-        <artifactId>jcodemodel</artifactId>
-        <version>3.4.1</version>
-      </dependency>
 
       <!-- The sub-projects of this project have a constant version -->
       <dependency>
-        <groupId>eu.de4a</groupId>
-        <artifactId>de4a-kafka-client</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>eu.de4a</groupId>
-        <artifactId>de4a-iem</artifactId>
+        <groupId>eu.de4a.ial</groupId>
+        <artifactId>ial-api</artifactId>
         <version>${project.version}</version>
       </dependency>
     </dependencies>
