@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RequestLookupRoutingInformation xmlns="http://www.de4a.eu/2020/ial/v2">
+  <RoutingEvidenceInformationItem>
+    <CanonicalEvidenceTypeId>CompanyRegistration</CanonicalEvidenceTypeId>
+    <AtuCode>AT</AtuCode>
+  </RoutingEvidenceInformationItem>
+</RequestLookupRoutingInformation>

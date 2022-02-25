@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ResponseLookupRoutingInformation xmlns="http://www.de4a.eu/2020/ial/v2">
+  <AvailableSource>
+    <CountryCode>AT</CountryCode>
+    <AtuLevel>nuts0</AtuLevel>
+    <NumProvisions>2</NumProvisions>
+  </AvailableSource>
+</ResponseLookupRoutingInformation>
