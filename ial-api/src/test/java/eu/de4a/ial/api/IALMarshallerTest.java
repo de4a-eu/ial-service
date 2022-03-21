@@ -36,7 +36,8 @@ public final class IALMarshallerTest
   private static final Logger LOGGER = LoggerFactory.getLogger (IALMarshallerTest.class);
   private static final String BASE_PATH = "src/test/resources/ial/";
 
-  private static <T> void _testReadWrite (@Nonnull final GenericJAXBMarshaller <T> aMarshaller, @Nonnull final File aFile)
+  private static <T> void _testReadWrite (@Nonnull final GenericJAXBMarshaller <T> aMarshaller,
+                                          @Nonnull final File aFile)
   {
     assertTrue ("Test file does not exists " + aFile.getAbsolutePath (), aFile.exists ());
 
@@ -63,9 +64,13 @@ public final class IALMarshallerTest
   public void testIDK_LookupRoutingInformation ()
   {
     // Request
-    _testReadWrite (IALMarshaller.idkRequestLookupRoutingInformationMarshaller (), new File (BASE_PATH + "IDK-request-routing.xml"));
+    _testReadWrite (IALMarshaller.idkRequestLookupRoutingInformationMarshaller (),
+                    new File (BASE_PATH + "IDK-request-routing.xml"));
 
     // Response
-    _testReadWrite (IALMarshaller.idkResponseLookupRoutingInformationMarshaller (), new File (BASE_PATH + "IDK-response-routing.xml"));
+    _testReadWrite (IALMarshaller.idkResponseLookupRoutingInformationMarshaller (),
+                    new File (BASE_PATH + "IDK-response-routing.xml"));
+    _testReadWrite (IALMarshaller.idkResponseLookupRoutingInformationMarshaller (),
+                    new File (BASE_PATH + "IDK-response-routing-min.xml"));
   }
 }

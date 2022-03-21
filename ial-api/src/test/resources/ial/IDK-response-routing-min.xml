@@ -6,12 +6,5 @@
     <AtuLatinName>Austria</AtuLatinName>
     <DataOwnerId>iso6523-actorid-upis::9915:de4atest</DataOwnerId>
     <DataOwnerPrefLabel>Test data owner</DataOwnerPrefLabel>
-    <ParameterSet>
-      <Title>ES/BirthEvidence/BirthRegister</Title>
-      <Parameter>
-        <Name>ES/Register/Volume</Name>
-        <Optional>false</Optional>
-      </Parameter>
-    </ParameterSet>
   </AvailableSource>
 </ResponseLookupRoutingInformation>
