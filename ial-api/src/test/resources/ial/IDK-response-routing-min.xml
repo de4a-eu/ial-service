@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ResponseLookupRoutingInformation xmlns="http://www.de4a.eu/2020/ial/v2">
-  <AvailableSource>
-    <AtuLevel>nuts0</AtuLevel>
-    <AtuCode>AT</AtuCode>
-    <AtuLatinName>Austria</AtuLatinName>
-    <DataOwnerId>iso6523-actorid-upis::9915:de4atest</DataOwnerId>
-    <DataOwnerPrefLabel>Test data owner</DataOwnerPrefLabel>
-  </AvailableSource>
+  <ResponseItem CanonicalObjectTypeId="urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0">
+    <ResponsePerCountry CountryCode="AT">
+      <Provision>
+        <AtuLevel>nuts0</AtuLevel>
+        <AtuCode>AT</AtuCode>
+        <AtuLatinName>Austria</AtuLatinName>
+        <DataOwnerId>iso6523-actorid-upis::9915:de4atest</DataOwnerId>
+        <DataOwnerPrefLabel>Test data owner</DataOwnerPrefLabel>
+      </Provision>
+    </ResponsePerCountry>
+  </ResponseItem>
 </ResponseLookupRoutingInformation>

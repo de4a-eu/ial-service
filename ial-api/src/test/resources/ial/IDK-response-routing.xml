@@ -1,17 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ResponseLookupRoutingInformation xmlns="http://www.de4a.eu/2020/ial/v2">
-  <AvailableSource>
-    <AtuLevel>nuts0</AtuLevel>
-    <AtuCode>AT</AtuCode>
-    <AtuLatinName>Austria</AtuLatinName>
-    <DataOwnerId>iso6523-actorid-upis::9915:de4atest</DataOwnerId>
-    <DataOwnerPrefLabel>Test data owner</DataOwnerPrefLabel>
-    <ParameterSet>
-      <Title>ES/BirthEvidence/BirthRegister</Title>
-      <Parameter>
-        <Name>ES/Register/Volume</Name>
-        <Optional>false</Optional>
-      </Parameter>
-    </ParameterSet>
-  </AvailableSource>
+  <ResponseItem CanonicalObjectTypeId="urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0">
+    <ResponsePerCountry CountryCode="AT">
+      <Provision>
+        <AtuLevel>nuts3</AtuLevel>
+        <AtuCode>AT123</AtuCode>
+        <AtuLatinName>Austria1</AtuLatinName>
+        <DataOwnerId>iso6523-actorid-upis::9915:de4atest</DataOwnerId>
+        <DataOwnerPrefLabel>Test data owner</DataOwnerPrefLabel>
+        <ParameterSet>
+          <Title>ES/BirthEvidence/BirthRegister</Title>
+          <Parameter>
+            <Name>ES/Register/Volume</Name>
+            <Optional>false</Optional>
+          </Parameter>
+        </ParameterSet>
+      </Provision>
+      <Provision>
+        <AtuLevel>nuts3</AtuLevel>
+        <AtuCode>AT130</AtuCode>
+        <AtuLatinName>Austria2</AtuLatinName>
+        <DataOwnerId>iso6523-actorid-upis::9915:de4atest2</DataOwnerId>
+        <DataOwnerPrefLabel>Test data owner</DataOwnerPrefLabel>
+      </Provision>
+    </ResponsePerCountry>
+    <ResponsePerCountry CountryCode="BE">
+      <Provision>
+        <AtuLevel>nuts0</AtuLevel>
+        <AtuCode>BE</AtuCode>
+        <AtuLatinName>Belgium</AtuLatinName>
+        <DataOwnerId>iso6523-actorid-upis::9915:de4atest3</DataOwnerId>
+        <DataOwnerPrefLabel>Test data owner</DataOwnerPrefLabel>
+      </Provision>
+    </ResponsePerCountry>
+  </ResponseItem>
 </ResponseLookupRoutingInformation>
