@@ -25,13 +25,14 @@ import com.helger.commons.collection.impl.CommonsArrayList;
 import com.helger.commons.io.resource.ClassPathResource;
 import com.helger.jaxb.GenericJAXBMarshaller;
 
-import eu.de4a.ial.api.jaxb.RequestLookupRoutingInformationType;
 import eu.de4a.ial.api.jaxb.ResponseLookupRoutingInformationType;
 
 /**
  * IAL Marshaller factory
  *
  * @author Philip Helger
+ * @param <JAXBTYPE>
+ *        The JAXB implementation type
  */
 @Immutable
 public class IALMarshaller <JAXBTYPE> extends GenericJAXBMarshaller <JAXBTYPE>
@@ -56,14 +57,9 @@ public class IALMarshaller <JAXBTYPE> extends GenericJAXBMarshaller <JAXBTYPE>
     return this;
   }
 
-  @Nonnull
-  public static IALMarshaller <RequestLookupRoutingInformationType> idkRequestLookupRoutingInformationMarshaller ()
-  {
-    return new IALMarshaller <> (RequestLookupRoutingInformationType.class,
-                                 new CommonsArrayList <> (CIALJAXB.XSD_IAL),
-                                 new eu.de4a.ial.api.jaxb.ObjectFactory ()::createRequestLookupRoutingInformation);
-  }
-
+  /**
+   * @return A new marshaller for the response. Never <code>null</code>.
+   */
   @Nonnull
   public static IALMarshaller <ResponseLookupRoutingInformationType> idkResponseLookupRoutingInformationMarshaller ()
   {

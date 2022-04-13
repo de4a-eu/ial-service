@@ -63,10 +63,6 @@ public final class IALMarshallerTest
   @Test
   public void testIDK_LookupRoutingInformation ()
   {
-    // Request
-    _testReadWrite (IALMarshaller.idkRequestLookupRoutingInformationMarshaller (),
-                    new File (BASE_PATH + "IDK-request-routing.xml"));
-
     // Response
     _testReadWrite (IALMarshaller.idkResponseLookupRoutingInformationMarshaller (),
                     new File (BASE_PATH + "IDK-response-routing.xml"));
