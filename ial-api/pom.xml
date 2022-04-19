@@ -74,6 +74,25 @@
   </dependencies>
 
   <build>
+    <resources>
+      <!-- Don't specify the targetPath because this leads to a broken JAR file 
+        in combination with the bundle plugin (absolute file paths in ZIP file) -->
+      <resource>
+        <directory>${basedir}/src/main/resources</directory>
+        <filtering>true</filtering>
+        <includes>
+          <include>**/*.properties</include>
+        </includes>
+      </resource>
+      <resource>
+        <directory>${basedir}/src/main/resources</directory>
+        <filtering>false</filtering>
+        <excludes>
+          <exclude>**/*.properties</exclude>
+        </excludes>  
+      </resource>
+    </resources>
+
     <plugins>
       <plugin>
         <groupId>org.apache.felix</groupId>
@@ -83,6 +102,8 @@
             <Automatic-Module-Name>eu.de4a.ial.api</Automatic-Module-Name>
             <Export-Package>eu.de4a.ial.api.*</Export-Package>
             <Import-Package>!javax.annotation.*,*</Import-Package>
+            <!-- The latter one has precedence -->
+            <Include-Resource>{maven-resources},ial-version.properties=target/classes/ial-version.properties</Include-Resource>
           </instructions>
         </configuration>
       </plugin>
