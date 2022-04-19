@@ -154,12 +154,11 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     aResponse.addError (_createError ("c1", "Test"));
 
     final AcceptMimeTypeList aAccept = RequestHelper.getAcceptMimeTypes (aRequestScope.getRequest ());
-    LOGGER.info ("Accept list: " + aAccept);
     if (aAccept.getQualityOfMimeType (CMimeType.APPLICATION_JSON) > aAccept.getQualityOfMimeType (CMimeType.APPLICATION_XML))
     {
       // As JSON
       if (LOGGER.isDebugEnabled ())
-        LOGGER.debug ("Rendering response as XML");
+        LOGGER.debug ("Rendering response as JSON");
 
       final IJsonObject aJson = new JsonObject ();
       // TODO fill JSON
