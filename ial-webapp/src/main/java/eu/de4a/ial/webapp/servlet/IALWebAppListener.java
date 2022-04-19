@@ -19,7 +19,12 @@ package eu.de4a.ial.webapp.servlet;
 import javax.annotation.Nonnull;
 import javax.servlet.ServletContext;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.helger.commons.debug.GlobalDebug;
+import com.helger.commons.exception.InitializationException;
+import com.helger.commons.string.StringHelper;
 import com.helger.photon.api.APIDescriptor;
 import com.helger.photon.api.APIPath;
 import com.helger.photon.api.IAPIExceptionMapper;
@@ -40,6 +45,8 @@ import eu.de4a.ial.webapp.config.IALConfig;
  */
 public class IALWebAppListener extends WebAppListener
 {
+  private static final Logger LOGGER = LoggerFactory.getLogger (IALWebAppListener.class);
+
   public IALWebAppListener ()
   {
     setHandleStatisticsOnEnd (false);
@@ -76,6 +83,11 @@ public class IALWebAppListener extends WebAppListener
   {
     GlobalDebug.setDebugModeDirect (IALConfig.Global.isGlobalDebug ());
     GlobalDebug.setProductionModeDirect (IALConfig.Global.isGlobalProduction ());
+
+    final String sDirectoryBaseURL = IALConfig.Directory.getBaseURL ();
+    if (StringHelper.hasNoText (sDirectoryBaseURL))
+      throw new InitializationException ("The Directory base URL configuration is missing");
+    LOGGER.info ("Using '" + sDirectoryBaseURL + "' as the Directory base URL");
   }
 
   @Override

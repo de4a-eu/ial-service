@@ -101,12 +101,6 @@ public final class IALConfig
     {
       return getConfig ().getAsBoolean ("global.production", GlobalDebug.isProductionMode ());
     }
-
-    @Nullable
-    public static String getDE4AInstanceName ()
-    {
-      return getConfig ().getAsString ("global.instancename");
-    }
   }
 
   /**
@@ -174,12 +168,12 @@ public final class IALConfig
 
     /**
      * @return The DE4A Directory URL to base queries on. Should not be
-     *         <code>null</code>.
+     *         <code>null</code>. Should not contain a trailing slash.
      */
     @Nullable
     public static String getBaseURL ()
     {
-      return getConfig ().getAsString ("de4a.directory.url");
+      return getConfig ().getAsString ("ial.directory.url");
     }
   }
 

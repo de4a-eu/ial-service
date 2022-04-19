@@ -20,21 +20,35 @@ import java.util.Map;
 
 import javax.annotation.Nonnull;
 
+import org.apache.http.client.methods.HttpGet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.w3c.dom.Document;
 
 import com.helger.commons.annotation.Nonempty;
+import com.helger.commons.collection.impl.CommonsHashMap;
 import com.helger.commons.collection.impl.CommonsLinkedHashSet;
+import com.helger.commons.collection.impl.ICommonsMap;
 import com.helger.commons.collection.impl.ICommonsOrderedSet;
 import com.helger.commons.mime.CMimeType;
 import com.helger.commons.string.StringHelper;
 import com.helger.commons.timing.StopWatch;
+import com.helger.commons.url.SimpleURL;
+import com.helger.http.AcceptMimeTypeList;
+import com.helger.httpclient.HttpClientManager;
+import com.helger.httpclient.HttpClientSettings;
+import com.helger.httpclient.response.ResponseHandlerXml;
 import com.helger.json.IJsonObject;
 import com.helger.json.JsonObject;
 import com.helger.json.serialize.JsonWriterSettings;
+import com.helger.masterdata.nuts.INutsManager;
+import com.helger.masterdata.nuts.NutsManager;
+import com.helger.pd.searchapi.PDSearchAPIReader;
+import com.helger.pd.searchapi.v1.ResultListType;
 import com.helger.photon.api.IAPIDescriptor;
 import com.helger.photon.api.IAPIExecutor;
 import com.helger.photon.app.PhotonUnifiedResponse;
+import com.helger.servlet.request.RequestHelper;
 import com.helger.servlet.response.UnifiedResponse;
 import com.helger.web.scope.IRequestWebScopeWithoutResponse;
 import com.helger.xml.serialize.write.XMLWriterSettings;
@@ -42,6 +56,7 @@ import com.helger.xml.serialize.write.XMLWriterSettings;
 import eu.de4a.ial.api.IALMarshaller;
 import eu.de4a.ial.api.jaxb.ErrorType;
 import eu.de4a.ial.api.jaxb.ResponseLookupRoutingInformationType;
+import eu.de4a.ial.webapp.config.IALConfig;
 
 /**
  * Provide the public query API
@@ -80,6 +95,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
     final StopWatch aSW = StopWatch.createdStarted ();
 
+    // Get and check parameters
     final String sCOTIDs = aPathVariables.get ("canonicalObjectTypeIDs");
     final ICommonsOrderedSet <String> aCOTIDs = new CommonsLinkedHashSet <> ();
     StringHelper.explode (',', sCOTIDs, x -> aCOTIDs.add (x.trim ()));
@@ -91,11 +107,65 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     if (aCOTIDs.isEmpty ())
       throw new IALBadRequestException ("No Canonical Object Type ID was passed", aRequestScope);
 
+    final INutsManager aNutsMgr = NutsManager.INSTANCE_2021;
+    if (m_bWithATUCode)
+    {
+      if (aNutsMgr.isIDValid (sAtuCode))
+        LOGGER.info ("The provided ATU code '" + sAtuCode + "' is a NUTS code");
+      else
+        LOGGER.info ("The provided ATU code '" + sAtuCode + "' seems to be a LAU code");
+    }
+
+    // Perform Directory queries
+    final ICommonsMap <String, ResultListType> aDirectoryResults = new CommonsHashMap <> ();
+    final HttpClientSettings aHCS = new HttpClientSettings ();
+    try (final HttpClientManager aHCM = HttpClientManager.create (aHCS))
+    {
+      for (final String sCOTID : aCOTIDs)
+      {
+        // Build base URL and fetch all records per HTTP request
+        final SimpleURL aBaseURL = new SimpleURL (IALConfig.Directory.getBaseURL () + "/search/1.0/xml");
+        // More than 1000 is not allowed
+        aBaseURL.add ("rpc", 100);
+        aBaseURL.add ("doctype", sCOTID);
+
+        LOGGER.info ("Querying Directory for DocTypeID '" + sCOTID + "'");
+
+        final HttpGet aGet = new HttpGet (aBaseURL.getAsStringWithEncodedParameters ());
+        final Document aResponseXML = aHCM.execute (aGet, new ResponseHandlerXml (false));
+
+        // Parse result
+        final ResultListType aResultList = PDSearchAPIReader.resultListV1 ().read (aResponseXML);
+        if (aResultList != null)
+        {
+          // Only remember results with matches
+          if (aResultList.hasMatchEntries ())
+            aDirectoryResults.put (sCOTID, aResultList);
+        }
+        else
+          LOGGER.error ("Failed to parse Directory result as XML");
+      }
+    }
+
+    LOGGER.info ("Collective Directory results: " + aDirectoryResults);
+
     final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
-    // TODO fill
+    // TODO fill response
     aResponse.addError (_createError ("c1", "Test"));
 
-    if (true)
+    final AcceptMimeTypeList aAccept = RequestHelper.getAcceptMimeTypes (aRequestScope.getRequest ());
+    LOGGER.info ("Accept list: " + aAccept);
+    if (aAccept.getQualityOfMimeType (CMimeType.APPLICATION_JSON) > aAccept.getQualityOfMimeType (CMimeType.APPLICATION_XML))
+    {
+      // As JSON
+      if (LOGGER.isDebugEnabled ())
+        LOGGER.debug ("Rendering response as XML");
+
+      final IJsonObject aJson = new JsonObject ();
+      // TODO fill JSON
+      aPUR.json (aJson);
+    }
+    else
     {
       // As XML
       if (LOGGER.isDebugEnabled ())
@@ -108,16 +178,6 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       aPUR.setContent (aXML)
           .setCharset (XMLWriterSettings.DEFAULT_XML_CHARSET_OBJ)
           .setMimeType (CMimeType.APPLICATION_XML);
-    }
-    else
-    {
-      // As JSON
-      if (LOGGER.isDebugEnabled ())
-        LOGGER.debug ("Rendering response as XML");
-
-      final IJsonObject aJson = new JsonObject ();
-      // TODO fill JSON
-      aPUR.json (aJson);
     }
 
     aSW.stop ();
