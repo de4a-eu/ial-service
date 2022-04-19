@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2022 DE4A, www.de4a.eu
+ * Author: philip[at]helger[dot]com
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -11,23 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package eu.de4a.ial.api;
+package eu.de4a.ial.webapp.jetty;
 
-import static org.junit.Assert.assertNotEquals;
+import java.io.IOException;
 
-import org.junit.Test;
+import com.helger.photon.jetty.JettyStopper;
 
-/**
- * Test class for class {@link IALVersion}
- *
- * @author Philip Helger
- */
-public final class IALVersionTest
+public final class JettyStopIAL
 {
-  @Test
-  public void testBasic ()
+  public static void main (final String [] args) throws IOException
   {
-    assertNotEquals ("undefined", IALVersion.BUILD_VERSION);
-    assertNotEquals ("undefined", IALVersion.BUILD_TIMESTAMP);
+    new JettyStopper ().run ();
   }
 }

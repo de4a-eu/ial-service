@@ -1,4 +1,7 @@
 /*
+ * Copyright (C) 2022 DE4A, www.de4a.eu
+ * Author: philip[at]helger[dot]com
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -11,23 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package eu.de4a.ial.api;
+package eu.de4a.ial.webapp.api;
 
-import static org.junit.Assert.assertNotEquals;
-
-import org.junit.Test;
+import javax.annotation.Nonnull;
 
 /**
- * Test class for class {@link IALVersion}
+ * Exception that is thrown to indicate an HTTP 500 error.
  *
  * @author Philip Helger
  */
-public final class IALVersionTest
+public class IALInternalErrorException extends Exception
 {
-  @Test
-  public void testBasic ()
+  public IALInternalErrorException (@Nonnull final String sMsg)
   {
-    assertNotEquals ("undefined", IALVersion.BUILD_VERSION);
-    assertNotEquals ("undefined", IALVersion.BUILD_TIMESTAMP);
+    super (sMsg);
+  }
+
+  public IALInternalErrorException (@Nonnull final String sMsg, @Nonnull final Throwable aCause)
+  {
+    super (sMsg, aCause);
   }
 }
