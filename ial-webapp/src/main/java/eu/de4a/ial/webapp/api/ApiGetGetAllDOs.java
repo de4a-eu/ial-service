@@ -38,7 +38,9 @@ import com.helger.http.AcceptMimeTypeList;
 import com.helger.httpclient.HttpClientManager;
 import com.helger.httpclient.HttpClientSettings;
 import com.helger.httpclient.response.ResponseHandlerXml;
+import com.helger.json.IJsonArray;
 import com.helger.json.IJsonObject;
+import com.helger.json.JsonArray;
 import com.helger.json.JsonObject;
 import com.helger.json.serialize.JsonWriterSettings;
 import com.helger.masterdata.nuts.INutsManager;
@@ -54,8 +56,14 @@ import com.helger.web.scope.IRequestWebScopeWithoutResponse;
 import com.helger.xml.serialize.write.XMLWriterSettings;
 
 import eu.de4a.ial.api.IALMarshaller;
+import eu.de4a.ial.api.jaxb.AtuLevelType;
 import eu.de4a.ial.api.jaxb.ErrorType;
+import eu.de4a.ial.api.jaxb.ParameterSetType;
+import eu.de4a.ial.api.jaxb.ParameterType;
+import eu.de4a.ial.api.jaxb.ProvisionType;
+import eu.de4a.ial.api.jaxb.ResponseItemType;
 import eu.de4a.ial.api.jaxb.ResponseLookupRoutingInformationType;
+import eu.de4a.ial.api.jaxb.ResponsePerCountryType;
 import eu.de4a.ial.webapp.config.IALConfig;
 
 /**
@@ -72,6 +80,69 @@ public class ApiGetGetAllDOs implements IAPIExecutor
   public ApiGetGetAllDOs (final boolean bWithATUCode)
   {
     m_bWithATUCode = bWithATUCode;
+  }
+
+  @Nonnull
+  public static IJsonObject getAsJson (@Nonnull final ResponseLookupRoutingInformationType aResponse)
+  {
+    final IJsonObject ret = new JsonObject ();
+    if (aResponse.hasErrorEntries ())
+    {
+      // Response errors
+      final IJsonArray aArray = new JsonArray ();
+      for (final ErrorType aError : aResponse.getError ())
+        aArray.add (new JsonObject ().add ("code", aError.getCode ()).add ("text", aError.getText ()));
+      ret.addJson ("errors", aArray);
+    }
+    else
+    {
+      // Response items
+      final IJsonArray aJsonItems = new JsonArray ();
+      for (final ResponseItemType aResponseItem : aResponse.getResponseItem ())
+      {
+        final IJsonObject aJsonItem = new JsonObject ().add ("canonicalObjectTypeId",
+                                                             aResponseItem.getCanonicalObjectTypeId ());
+        final IJsonArray aJsonPerCountries = new JsonArray ();
+        for (final ResponsePerCountryType aRPC : aResponseItem.getResponsePerCountry ())
+        {
+          final IJsonObject aJsonPerCountry = new JsonObject ().add ("countryCode", aRPC.getCountryCode ());
+          final IJsonArray aJsonProvisions = new JsonArray ();
+          for (final ProvisionType aProvision : aRPC.getProvision ())
+          {
+            final IJsonObject aJsonProvision = new JsonObject ();
+            if (aProvision.getAtuLevel () != null)
+              aJsonProvision.add ("atuLevel", aProvision.getAtuLevel ().value ());
+            aJsonProvision.add ("atuCode", aProvision.getAtuCode ());
+            aJsonProvision.add ("atuLatinName", aProvision.getAtuLatinName ());
+            aJsonProvision.add ("dataOwnerID", aProvision.getDataOwnerId ());
+            aJsonProvision.add ("dataOwnerPrefLabel", aProvision.getDataOwnerPrefLabel ());
+            if (aProvision.hasParameterSetEntries ())
+            {
+              final IJsonArray aJsonParamSets = new JsonArray ();
+              for (final ParameterSetType aParamSet : aProvision.getParameterSet ())
+              {
+                final IJsonObject aJsonParamSet = new JsonObject ();
+                aJsonParamSet.add ("title", aParamSet.getTitle ());
+                aJsonParamSet.addJson ("parameterList",
+                                       new JsonArray ().addAllMapped (aParamSet.getParameter (),
+                                                                      x -> new JsonObject ().add ("name", x.getName ())
+                                                                                            .add ("optional",
+                                                                                                  x.isOptional ())));
+                aJsonParamSets.add (aJsonParamSet);
+              }
+              aJsonProvision.addJson ("parameterSets", aJsonParamSets);
+            }
+            aJsonProvisions.add (aJsonProvision);
+          }
+          aJsonPerCountry.addJson ("provisions", aJsonProvisions);
+          aJsonPerCountries.add (aJsonPerCountry);
+        }
+        aJsonItem.addJson ("countries", aJsonPerCountries);
+        aJsonItems.add (aJsonItem);
+      }
+      ret.addJson ("items", aJsonItems);
+    }
+    return ret;
   }
 
   @Nonnull
@@ -151,7 +222,31 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
     final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
     // TODO fill response
-    aResponse.addError (_createError ("c1", "Test"));
+    if (true)
+    {
+      final ResponseItemType aItem = new ResponseItemType ();
+      aItem.setCanonicalObjectTypeId ("CO2");
+      final ResponsePerCountryType aPerCountry = new ResponsePerCountryType ();
+      aPerCountry.setCountryCode ("AT");
+      final ProvisionType aProvision = new ProvisionType ();
+      aProvision.setAtuLevel (AtuLevelType.NUTS_3);
+      aProvision.setAtuCode ("ATU130");
+      aProvision.setAtuLatinName ("Wien");
+      aProvision.setDataOwnerId ("iso6523-actorid-upis::9999:test");
+      aProvision.setDataOwnerPrefLabel ("bla");
+      final ParameterSetType aParamSet = new ParameterSetType ();
+      aParamSet.setTitle ("title1");
+      final ParameterType aParam = new ParameterType ();
+      aParam.setName ("PName");
+      aParam.setOptional (true);
+      aParamSet.addParameter (aParam);
+      aProvision.addParameterSet (aParamSet);
+      aPerCountry.addProvision (aProvision);
+      aItem.addResponsePerCountry (aPerCountry);
+      aResponse.addResponseItem (aItem);
+    }
+    else
+      aResponse.addError (_createError ("c1", "Test"));
 
     final AcceptMimeTypeList aAccept = RequestHelper.getAcceptMimeTypes (aRequestScope.getRequest ());
     if (aAccept.getQualityOfMimeType (CMimeType.APPLICATION_JSON) > aAccept.getQualityOfMimeType (CMimeType.APPLICATION_XML))
@@ -160,9 +255,8 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       if (LOGGER.isDebugEnabled ())
         LOGGER.debug ("Rendering response as JSON");
 
-      final IJsonObject aJson = new JsonObject ();
-      // TODO fill JSON
-      aPUR.json (aJson);
+      // fill JSON
+      aPUR.json (getAsJson (aResponse));
     }
     else
     {
@@ -170,7 +264,9 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       if (LOGGER.isDebugEnabled ())
         LOGGER.debug ("Rendering response as XML");
 
-      final byte [] aXML = IALMarshaller.idkResponseLookupRoutingInformationMarshaller ().getAsBytes (aResponse);
+      final byte [] aXML = IALMarshaller.idkResponseLookupRoutingInformationMarshaller ()
+                                        .formatted ()
+                                        .getAsBytes (aResponse);
       if (aXML == null)
         throw new IALInternalErrorException ("Failed to serialize XML response");
 
