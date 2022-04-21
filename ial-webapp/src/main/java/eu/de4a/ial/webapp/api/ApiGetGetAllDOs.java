@@ -43,7 +43,9 @@ import com.helger.json.IJsonObject;
 import com.helger.json.JsonArray;
 import com.helger.json.JsonObject;
 import com.helger.json.serialize.JsonWriterSettings;
+import com.helger.masterdata.nuts.ILauManager;
 import com.helger.masterdata.nuts.INutsManager;
+import com.helger.masterdata.nuts.LauManager;
 import com.helger.masterdata.nuts.NutsManager;
 import com.helger.pd.searchapi.PDSearchAPIReader;
 import com.helger.pd.searchapi.v1.ResultListType;
@@ -179,12 +181,18 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       throw new IALBadRequestException ("No Canonical Object Type ID was passed", aRequestScope);
 
     final INutsManager aNutsMgr = NutsManager.INSTANCE_2021;
+    final ILauManager aLauMgr = LauManager.INSTANCE_2021;
     if (m_bWithATUCode)
     {
+      // Consistency check
       if (aNutsMgr.isIDValid (sAtuCode))
-        LOGGER.info ("The provided ATU code '" + sAtuCode + "' is a NUTS code");
+        LOGGER.info ("The provided ATU code '" + sAtuCode + "' is a valid NUTS code");
       else
-        LOGGER.info ("The provided ATU code '" + sAtuCode + "' seems to be a LAU code");
+        if (aLauMgr.isIDValid (sAtuCode))
+          LOGGER.info ("The provided ATU code '" + sAtuCode + "' is a valid LAU code");
+        else
+          throw new IALBadRequestException ("The provided ATU code '" + sAtuCode + "' is neither a NUTS nor a LAU code",
+                                            aRequestScope);
     }
 
     // Perform Directory queries
@@ -218,7 +226,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       }
     }
 
-    LOGGER.info ("Collective Directory results: " + aDirectoryResults);
+    LOGGER.info ("Collected Directory results: " + aDirectoryResults);
 
     final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
     // TODO fill response
