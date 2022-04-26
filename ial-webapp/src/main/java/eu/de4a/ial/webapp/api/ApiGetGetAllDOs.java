@@ -25,9 +25,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 
+import com.helger.commons.ValueEnforcer;
 import com.helger.commons.annotation.Nonempty;
+import com.helger.commons.collection.CollectionHelper;
+import com.helger.commons.collection.impl.CommonsArrayList;
 import com.helger.commons.collection.impl.CommonsHashMap;
 import com.helger.commons.collection.impl.CommonsLinkedHashSet;
+import com.helger.commons.collection.impl.CommonsTreeMap;
+import com.helger.commons.collection.impl.ICommonsList;
 import com.helger.commons.collection.impl.ICommonsMap;
 import com.helger.commons.collection.impl.ICommonsOrderedSet;
 import com.helger.commons.mime.CMimeType;
@@ -42,12 +47,18 @@ import com.helger.json.IJsonArray;
 import com.helger.json.IJsonObject;
 import com.helger.json.JsonArray;
 import com.helger.json.JsonObject;
+import com.helger.json.serialize.JsonReader;
 import com.helger.json.serialize.JsonWriterSettings;
+import com.helger.masterdata.nuts.ENutsLevel;
 import com.helger.masterdata.nuts.ILauManager;
 import com.helger.masterdata.nuts.INutsManager;
+import com.helger.masterdata.nuts.LauItem;
 import com.helger.masterdata.nuts.LauManager;
+import com.helger.masterdata.nuts.NutsItem;
 import com.helger.masterdata.nuts.NutsManager;
 import com.helger.pd.searchapi.PDSearchAPIReader;
+import com.helger.pd.searchapi.v1.EntityType;
+import com.helger.pd.searchapi.v1.MatchType;
 import com.helger.pd.searchapi.v1.ResultListType;
 import com.helger.photon.api.IAPIDescriptor;
 import com.helger.photon.api.IAPIExecutor;
@@ -172,6 +183,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     final String sCOTIDs = aPathVariables.get ("canonicalObjectTypeIDs");
     final ICommonsOrderedSet <String> aCOTIDs = new CommonsLinkedHashSet <> ();
     StringHelper.explode (',', sCOTIDs, x -> aCOTIDs.add (x.trim ()));
+
     final String sAtuCode = m_bWithATUCode ? aPathVariables.get ("atuCode") : null;
 
     if (LOGGER.isInfoEnabled ())
@@ -226,35 +238,161 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       }
     }
 
-    LOGGER.info ("Collected Directory results: " + aDirectoryResults);
+    if (aDirectoryResults.isEmpty ())
+      LOGGER.warn ("Found no matches in the Directory");
+    else
+      LOGGER.info ("Collected Directory results: " + aDirectoryResults);
 
-    final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
-    // TODO fill response
-    if (true)
+    // Group results by COT and Country
+    final ICommonsMap <String, ICommonsMap <String, ICommonsList <MatchType>>> aGroupedMap = new CommonsTreeMap <> ();
+    for (final Map.Entry <String, ResultListType> aEntry : aDirectoryResults.entrySet ())
     {
+      final String sCOT = aEntry.getKey ();
+      final ResultListType aRL = aEntry.getValue ();
+      for (final MatchType aMatch : aRL.getMatch ())
+      {
+        final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT,
+                                                                                                      k -> new CommonsTreeMap <> ());
+        for (final EntityType aEntity : aMatch.getEntity ())
+        {
+          // Match with only one Entity
+          final MatchType aSubMatch = aMatch.clone ();
+          aSubMatch.getEntity ().clear ();
+          aSubMatch.addEntity (aEntity);
+          aMapByCOT.computeIfAbsent (aEntity.getCountryCode (), k -> new CommonsArrayList <> ()).add (aSubMatch);
+        }
+      }
+    }
+
+    // fill IAL response data types
+    final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
+    for (final Map.Entry <String, ICommonsMap <String, ICommonsList <MatchType>>> aEntry : aGroupedMap.entrySet ())
+    {
+      final String sCOT = aEntry.getKey ();
       final ResponseItemType aItem = new ResponseItemType ();
-      aItem.setCanonicalObjectTypeId ("CO2");
-      final ResponsePerCountryType aPerCountry = new ResponsePerCountryType ();
-      aPerCountry.setCountryCode ("AT");
-      final ProvisionType aProvision = new ProvisionType ();
-      aProvision.setAtuLevel (AtuLevelType.NUTS_3);
-      aProvision.setAtuCode ("ATU130");
-      aProvision.setAtuLatinName ("Wien");
-      aProvision.setDataOwnerId ("iso6523-actorid-upis::9999:test");
-      aProvision.setDataOwnerPrefLabel ("bla");
-      final ParameterSetType aParamSet = new ParameterSetType ();
-      aParamSet.setTitle ("title1");
-      final ParameterType aParam = new ParameterType ();
-      aParam.setName ("PName");
-      aParam.setOptional (true);
-      aParamSet.addParameter (aParam);
-      aProvision.addParameterSet (aParamSet);
-      aPerCountry.addProvision (aProvision);
-      aItem.addResponsePerCountry (aPerCountry);
+      aItem.setCanonicalObjectTypeId (sCOT);
+
+      for (final Map.Entry <String, ICommonsList <MatchType>> aEntry2 : aEntry.getValue ().entrySet ())
+      {
+        final String sCountryCode = aEntry2.getKey ();
+        final ResponsePerCountryType aPerCountry = new ResponsePerCountryType ();
+        aPerCountry.setCountryCode (sCountryCode);
+        for (final MatchType aMatch : aEntry2.getValue ())
+        {
+          ValueEnforcer.isTrue ( () -> aMatch.getEntityCount () == 1, "Entity mismatch");
+          final EntityType aEntity = aMatch.getEntityAtIndex (0);
+
+          String sMatchAtuCode = CollectionHelper.findFirstMapped (aEntity.getIdentifier (),
+                                                                   x -> "atuCode".equals (x.getScheme ()),
+                                                                   x -> x.getValue ());
+          if (StringHelper.hasNoText (sMatchAtuCode))
+            sMatchAtuCode = sCountryCode;
+          final ENutsLevel eNutsLevel = ENutsLevel.getFromLengthOrNull (sMatchAtuCode.length ());
+          // Assume "LAUT" if nuts level is null
+
+          final ProvisionType aProvision = new ProvisionType ();
+          final AtuLevelType eMatchAtuLevel;
+          final String sMatchAtuName;
+          if (eNutsLevel == null)
+          {
+            // Check if it is a LAU
+            final LauItem aLauItem = aLauMgr.getItemOfID (sMatchAtuCode);
+            if (aLauItem != null)
+            {
+              eMatchAtuLevel = AtuLevelType.LAU;
+              sMatchAtuName = aLauItem.getLatinDisplayName ();
+            }
+            else
+            {
+              // Fallback: assume EDU
+              eMatchAtuLevel = AtuLevelType.EDU;
+              // TODO
+              sMatchAtuName = "EDU - dunno";
+            }
+          }
+          else
+          {
+            final NutsItem aNutsItem = aNutsMgr.getItemOfID (sMatchAtuCode);
+            if (aNutsItem != null)
+              sMatchAtuName = aNutsItem.getLatinDisplayName ();
+            else
+              sMatchAtuName = "Unknown NUTS code '" + sMatchAtuCode + "'";
+
+            switch (eNutsLevel)
+            {
+              case COUNTRY:
+                eMatchAtuLevel = AtuLevelType.NUTS_0;
+                break;
+              case NUTS1:
+                eMatchAtuLevel = AtuLevelType.NUTS_1;
+                break;
+              case NUTS2:
+                eMatchAtuLevel = AtuLevelType.NUTS_2;
+                break;
+              case NUTS3:
+                eMatchAtuLevel = AtuLevelType.NUTS_3;
+                break;
+              default:
+                throw new IllegalStateException ("Dunno level " + eNutsLevel);
+            }
+          }
+
+          aProvision.setAtuLevel (eMatchAtuLevel);
+          aProvision.setAtuCode (sMatchAtuCode);
+          aProvision.setAtuLatinName (sMatchAtuName);
+          aProvision.setDataOwnerId (aMatch.getParticipantID ().getScheme () + "::" + aMatch.getParticipantIDValue ());
+          aProvision.setDataOwnerPrefLabel (aEntity.getNameAtIndex (0).getValue ());
+
+          if (StringHelper.hasText (aEntity.getAdditionalInfo ()))
+          {
+            LOGGER.info ("Trying to parse additional information as JSON");
+
+            /**
+             * [ { "title": "ES/BirthEvidence/BirthRegister", "parameterList": [
+             * { "name": "ES/Register/Volume", "optional": false } ] } ]
+             */
+            final IJsonArray aJsonParamSets = JsonReader.builder ()
+                                                        .source (aEntity.getAdditionalInfo ())
+                                                        .readAsArray ();
+            if (aJsonParamSets != null && aJsonParamSets.isNotEmpty ())
+            {
+              for (final IJsonObject aJsonParamSet : aJsonParamSets.iteratorObjects ())
+              {
+                if (aJsonParamSet.containsKey ("title") && aJsonParamSet.containsKey ("parameterList"))
+                {
+                  final ParameterSetType aParamSet = new ParameterSetType ();
+                  aParamSet.setTitle (aJsonParamSet.getAsString ("title"));
+                  final IJsonArray aJsonParamList = aJsonParamSet.getAsArray ("parameterList");
+                  if (aJsonParamList != null)
+                    for (final IJsonObject aJsonParam : aJsonParamList.iteratorObjects ())
+                    {
+                      final ParameterType aParam = new ParameterType ();
+                      aParam.setName (aJsonParam.getAsString ("name"));
+                      aParam.setOptional (aJsonParam.getAsBoolean ("optional", false));
+                      aParamSet.addParameter (aParam);
+                    }
+
+                  if (StringHelper.hasNoText (aParamSet.getTitle ()))
+                    LOGGER.warn ("JSON parameter set object has an empty title");
+                  else
+                    if (aParamSet.hasNoParameterEntries ())
+                      LOGGER.warn ("JSON parameter set object has no parameter set entry");
+                    else
+                      aProvision.addParameterSet (aParamSet);
+                }
+                else
+                  LOGGER.warn ("JSON parameter set object is missing title and/or parameterList");
+              }
+            }
+            else
+              LOGGER.warn ("Failed to read additional information as JSON array");
+          }
+          aPerCountry.addProvision (aProvision);
+        }
+        aItem.addResponsePerCountry (aPerCountry);
+      }
       aResponse.addResponseItem (aItem);
     }
-    else
-      aResponse.addError (_createError ("c1", "Test"));
 
     final AcceptMimeTypeList aAccept = RequestHelper.getAcceptMimeTypes (aRequestScope.getRequest ());
     if (aAccept.getQualityOfMimeType (CMimeType.APPLICATION_JSON) > aAccept.getQualityOfMimeType (CMimeType.APPLICATION_XML))
