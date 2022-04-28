@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import com.helger.commons.collection.CollectionHelper;
 import com.helger.commons.datetime.PDTFactory;
+import com.helger.commons.debug.GlobalDebug;
 import com.helger.commons.http.CHttpHeader;
 import com.helger.commons.mime.CMimeType;
 
@@ -64,9 +65,9 @@ public class IALRootServlet extends HttpServlet
     aSB.append ("<div>Build timestamp: ").append (IALVersion.BUILD_TIMESTAMP).append ("</div>");
     aSB.append ("<div>Current time: ").append (PDTFactory.getCurrentZonedDateTimeUTC ().toString ()).append ("</div>");
     aSB.append ("<div><a href='status'>Check /status</a></div>");
-    aSB.append ("<div><a href='https://github.com/de4a-wp5/ia-service' target='_blank'>Source code on GitHub</a></div>");
+    aSB.append ("<div><a href='https://github.com/de4a-wp5/ial-service' target='_blank'>Source code on GitHub</a></div>");
 
-    // if (GlobalDebug.isDebugMode ())
+    if (GlobalDebug.isDebugMode ())
     {
       aSB.append ("<h2>Servlet information</h2>");
       for (final Map.Entry <String, ? extends ServletRegistration> aEntry : CollectionHelper.getSortedByKey (req.getServletContext ()
