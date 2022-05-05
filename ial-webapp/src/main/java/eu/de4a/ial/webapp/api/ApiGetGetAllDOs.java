@@ -16,7 +16,9 @@
  */
 package eu.de4a.ial.webapp.api;
 
+import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nonnull;
 
@@ -89,6 +91,7 @@ import eu.de4a.ial.webapp.config.IALConfig;
 public class ApiGetGetAllDOs implements IAPIExecutor
 {
   private static final Logger LOGGER = LoggerFactory.getLogger (ApiGetGetAllDOs.class);
+  private static final AtomicLong COUNTER = new AtomicLong ();
 
   private final boolean m_bWithATUCode;
 
@@ -167,12 +170,19 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     return ret;
   }
 
+  private static String _unifyATU (@Nonnull final String s)
+  {
+    return s.toUpperCase (Locale.ROOT);
+  }
+
   public final void invokeAPI (@Nonnull final IAPIDescriptor aAPIDescriptor,
                                @Nonnull @Nonempty final String sPath,
                                @Nonnull final Map <String, String> aPathVariables,
                                @Nonnull final IRequestWebScopeWithoutResponse aRequestScope,
                                @Nonnull final UnifiedResponse aUnifiedResponse) throws Exception
   {
+    final String sLogPrefix = "[IAL-" + COUNTER.incrementAndGet () + "] ";
+
     final PhotonUnifiedResponse aPUR = (PhotonUnifiedResponse) aUnifiedResponse;
     aPUR.setJsonWriterSettings (new JsonWriterSettings ().setIndentEnabled (true));
     aPUR.disableCaching ();
@@ -185,10 +195,11 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     final ICommonsOrderedSet <String> aCOTIDs = new CommonsLinkedHashSet <> ();
     StringHelper.explode (',', sCOTIDs, x -> aCOTIDs.add (x.trim ()));
 
-    final String sAtuCode = m_bWithATUCode ? URLHelper.urlDecode (aPathVariables.get ("atuCode")) : null;
+    // Ensure the ATU code is upper case for consistent comparison
+    final String sAtuCode = m_bWithATUCode ? _unifyATU (URLHelper.urlDecode (aPathVariables.get ("atuCode"))) : null;
 
     if (LOGGER.isInfoEnabled ())
-      LOGGER.info ("Querying for " + aCOTIDs + (m_bWithATUCode ? " in ATU code '" + sAtuCode + "'" : ""));
+      LOGGER.info (sLogPrefix + "Querying for " + aCOTIDs + (m_bWithATUCode ? " in ATU code '" + sAtuCode + "'" : ""));
 
     if (aCOTIDs.isEmpty ())
       throw new IALBadRequestException ("No Canonical Object Type ID was passed", aRequestScope);
@@ -199,10 +210,10 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     {
       // Consistency check
       if (aNutsMgr.isIDValid (sAtuCode))
-        LOGGER.info ("The provided ATU code '" + sAtuCode + "' is a valid NUTS code");
+        LOGGER.info (sLogPrefix + "The provided ATU code '" + sAtuCode + "' is a valid NUTS code");
       else
         if (aLauMgr.isIDValid (sAtuCode))
-          LOGGER.info ("The provided ATU code '" + sAtuCode + "' is a valid LAU code");
+          LOGGER.info (sLogPrefix + "The provided ATU code '" + sAtuCode + "' is a valid LAU code");
         else
           throw new IALBadRequestException ("The provided ATU code '" + sAtuCode + "' is neither a NUTS nor a LAU code", aRequestScope);
     }
@@ -212,7 +223,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     final HttpClientSettings aHCS = new HttpClientSettings ();
     if (IALConfig.Directory.isTLSTrustAll ())
     {
-      LOGGER.warn ("The TLS connection trusts all certificates. That is not very secure.");
+      LOGGER.warn (sLogPrefix + "The TLS connection trusts all certificates. That is not very secure.");
       // This block is not nice but needed, because the system truststore of the
       // machine running the IAL is empty.
       // For a real production scenario, a separate trust store should be
@@ -236,7 +247,8 @@ public class ApiGetGetAllDOs implements IAPIExecutor
           aBaseURL.add ("country", sCountryCode);
         }
 
-        LOGGER.info ("Querying Directory for DocTypeID '" +
+        LOGGER.info (sLogPrefix +
+                     "Querying Directory for DocTypeID '" +
                      sCOTID +
                      "'" +
                      (m_bWithATUCode ? " and country code '" + sCountryCode + "'" : ""));
@@ -253,30 +265,31 @@ public class ApiGetGetAllDOs implements IAPIExecutor
             aDirectoryResults.put (sCOTID, aResultList);
         }
         else
-          LOGGER.error ("Failed to parse Directory result as XML");
+          LOGGER.error (sLogPrefix + "Failed to parse Directory result as XML");
       }
     }
 
     if (aDirectoryResults.isEmpty ())
-      LOGGER.warn ("Found no matches in the Directory");
+      LOGGER.warn (sLogPrefix + "Found no matches in the Directory");
     else
-      LOGGER.info ("Collected Directory results: " + aDirectoryResults);
+      LOGGER.info (sLogPrefix + "Collected Directory results: " + aDirectoryResults);
 
-    // Group results by COT and Country
+    // Group results by COT and Country Code
     final ICommonsMap <String, ICommonsMap <String, ICommonsList <MatchType>>> aGroupedMap = new CommonsTreeMap <> ();
     for (final Map.Entry <String, ResultListType> aEntry : aDirectoryResults.entrySet ())
     {
       final String sCOT = aEntry.getKey ();
-      final ResultListType aRL = aEntry.getValue ();
-      for (final MatchType aMatch : aRL.getMatch ())
+      final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT, k -> new CommonsTreeMap <> ());
+
+      for (final MatchType aMatch : aEntry.getValue ().getMatch ())
       {
-        final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT, k -> new CommonsTreeMap <> ());
         for (final EntityType aEntity : aMatch.getEntity ())
         {
           // Match with only one Entity
           final MatchType aSubMatch = aMatch.clone ();
           aSubMatch.getEntity ().clear ();
           aSubMatch.addEntity (aEntity);
+
           aMapByCOT.computeIfAbsent (aEntity.getCountryCode (), k -> new CommonsArrayList <> ()).add (aSubMatch);
         }
       }
@@ -286,25 +299,50 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
     for (final Map.Entry <String, ICommonsMap <String, ICommonsList <MatchType>>> aEntry : aGroupedMap.entrySet ())
     {
-      final String sCOT = aEntry.getKey ();
+      // One result item per COT
       final ResponseItemType aItem = new ResponseItemType ();
-      aItem.setCanonicalObjectTypeId (sCOT);
+      aItem.setCanonicalObjectTypeId (aEntry.getKey ());
 
+      // Iterate per Country
       for (final Map.Entry <String, ICommonsList <MatchType>> aEntry2 : aEntry.getValue ().entrySet ())
       {
+        // One result per Country
         final String sCountryCode = aEntry2.getKey ();
         final ResponsePerCountryType aPerCountry = new ResponsePerCountryType ();
         aPerCountry.setCountryCode (sCountryCode);
+
         for (final MatchType aMatch : aEntry2.getValue ())
         {
           ValueEnforcer.isTrue ( () -> aMatch.getEntityCount () == 1, "Entity mismatch");
           final EntityType aEntity = aMatch.getEntityAtIndex (0);
 
+          // Check if this Entity has a specific "atuCode" defined
           String sMatchAtuCode = CollectionHelper.findFirstMapped (aEntity.getIdentifier (),
                                                                    x -> "atuCode".equals (x.getScheme ()),
                                                                    IDType::getValue);
           if (StringHelper.hasNoText (sMatchAtuCode))
+          {
+            // Fallback on country code
             sMatchAtuCode = sCountryCode;
+          }
+          sMatchAtuCode = _unifyATU (sMatchAtuCode);
+
+          if (m_bWithATUCode)
+          {
+            // Only take results that are on the same ATU level as the requested
+            // on
+            if (!sMatchAtuCode.startsWith (sAtuCode))
+            {
+              LOGGER.info (sLogPrefix +
+                           "Igoring result with ATU code '" +
+                           sMatchAtuCode +
+                           "' because it does not match the requested ATU code '" +
+                           sAtuCode +
+                           "'");
+              continue;
+            }
+          }
+
           final ENutsLevel eNutsLevel = ENutsLevel.getFromLengthOrNull (sMatchAtuCode.length ());
           // Assume "LAUT" if nuts level is null
 
@@ -363,7 +401,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
           if (StringHelper.hasText (aEntity.getAdditionalInfo ()))
           {
-            LOGGER.info ("Trying to parse additional information as JSON");
+            LOGGER.info (sLogPrefix + "Trying to parse additional information as JSON");
 
             /**
              * [ { "title": "ES/BirthEvidence/BirthRegister", "parameterList": [
@@ -389,25 +427,27 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                     }
 
                   if (StringHelper.hasNoText (aParamSet.getTitle ()))
-                    LOGGER.warn ("JSON parameter set object has an empty title");
+                    LOGGER.warn (sLogPrefix + "JSON parameter set object has an empty title");
                   else
                     if (aParamSet.hasNoParameterEntries ())
-                      LOGGER.warn ("JSON parameter set object has no parameter set entry");
+                      LOGGER.warn (sLogPrefix + "JSON parameter set object has no parameter set entry");
                     else
                       aProvision.addParameterSet (aParamSet);
                 }
                 else
-                  LOGGER.warn ("JSON parameter set object is missing title and/or parameterList");
+                  LOGGER.warn (sLogPrefix + "JSON parameter set object is missing title and/or parameterList");
               }
             }
             else
-              LOGGER.warn ("Failed to read additional information as JSON array");
+              LOGGER.warn (sLogPrefix + "Failed to read additional information as JSON array");
           }
           aPerCountry.addProvision (aProvision);
         }
-        aItem.addResponsePerCountry (aPerCountry);
+        if (aPerCountry.hasProvisionEntries ())
+          aItem.addResponsePerCountry (aPerCountry);
       }
-      aResponse.addResponseItem (aItem);
+      if (aItem.hasResponsePerCountryEntries ())
+        aResponse.addResponseItem (aItem);
     }
 
     if (aResponse.hasNoResponseItemEntries ())
@@ -425,7 +465,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     {
       // As JSON
       if (LOGGER.isDebugEnabled ())
-        LOGGER.debug ("Rendering response as JSON");
+        LOGGER.debug (sLogPrefix + "Rendering response as JSON");
 
       // fill JSON
       aPUR.json (getAsJson (aResponse));
@@ -434,7 +474,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     {
       // As XML
       if (LOGGER.isDebugEnabled ())
-        LOGGER.debug ("Rendering response as XML");
+        LOGGER.debug (sLogPrefix + "Rendering response as XML");
 
       final byte [] aXML = IALMarshaller.idkResponseLookupRoutingInformationMarshaller ().formatted ().getAsBytes (aResponse);
       if (aXML == null)
@@ -445,6 +485,6 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
     aSW.stop ();
 
-    LOGGER.info ("Successfully finalized querying Directory after " + aSW.getMillis () + "ms");
+    LOGGER.info (sLogPrefix + "Successfully finalized querying Directory after " + aSW.getMillis () + "ms");
   }
 }

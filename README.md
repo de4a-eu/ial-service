@@ -49,6 +49,9 @@ The Maven BOM can be used like this (replacing `x.y.z` with the real version num
 
 ## News and Noteworthy
 
+* v0.1.5 - 2022-05-05
+    * Fixed an internal error if no search result was found
+    * Added the missing `country` parameter when searching the Directory
 * v0.1.4 - 2022-05-05
     * Added a new configuration item `ial.directory.tls.trustall`
 * v0.1.3 - 2022-04-26
