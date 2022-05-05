@@ -175,6 +175,11 @@ public final class IALConfig
     {
       return getConfig ().getAsString ("ial.directory.url");
     }
+
+    public static boolean isTLSTrustAll ()
+    {
+      return getConfig ().getAsBoolean ("ial.directory.tls.trustall", false);
+    }
   }
 
   public static final class REST

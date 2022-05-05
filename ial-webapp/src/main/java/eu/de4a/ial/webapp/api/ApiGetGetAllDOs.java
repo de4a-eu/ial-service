@@ -58,6 +58,7 @@ import com.helger.masterdata.nuts.NutsItem;
 import com.helger.masterdata.nuts.NutsManager;
 import com.helger.pd.searchapi.PDSearchAPIReader;
 import com.helger.pd.searchapi.v1.EntityType;
+import com.helger.pd.searchapi.v1.IDType;
 import com.helger.pd.searchapi.v1.MatchType;
 import com.helger.pd.searchapi.v1.ResultListType;
 import com.helger.photon.api.IAPIDescriptor;
@@ -113,8 +114,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       final IJsonArray aJsonItems = new JsonArray ();
       for (final ResponseItemType aResponseItem : aResponse.getResponseItem ())
       {
-        final IJsonObject aJsonItem = new JsonObject ().add ("canonicalObjectTypeId",
-                                                             aResponseItem.getCanonicalObjectTypeId ());
+        final IJsonObject aJsonItem = new JsonObject ().add ("canonicalObjectTypeId", aResponseItem.getCanonicalObjectTypeId ());
         final IJsonArray aJsonPerCountries = new JsonArray ();
         for (final ResponsePerCountryType aRPC : aResponseItem.getResponsePerCountry ())
         {
@@ -139,8 +139,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                 aJsonParamSet.addJson ("parameterList",
                                        new JsonArray ().addAllMapped (aParamSet.getParameter (),
                                                                       x -> new JsonObject ().add ("name", x.getName ())
-                                                                                            .add ("optional",
-                                                                                                  x.isOptional ())));
+                                                                                            .add ("optional", x.isOptional ())));
                 aJsonParamSets.add (aJsonParamSet);
               }
               aJsonProvision.addJson ("parameterSets", aJsonParamSets);
@@ -203,13 +202,21 @@ public class ApiGetGetAllDOs implements IAPIExecutor
         if (aLauMgr.isIDValid (sAtuCode))
           LOGGER.info ("The provided ATU code '" + sAtuCode + "' is a valid LAU code");
         else
-          throw new IALBadRequestException ("The provided ATU code '" + sAtuCode + "' is neither a NUTS nor a LAU code",
-                                            aRequestScope);
+          throw new IALBadRequestException ("The provided ATU code '" + sAtuCode + "' is neither a NUTS nor a LAU code", aRequestScope);
     }
 
     // Perform Directory queries
     final ICommonsMap <String, ResultListType> aDirectoryResults = new CommonsHashMap <> ();
     final HttpClientSettings aHCS = new HttpClientSettings ();
+    if (IALConfig.Directory.isTLSTrustAll ())
+    {
+      LOGGER.warn ("The TLS connection trusts all certificates. That is not very secure.");
+      // This block is not nice but needed, because the system truststore of the
+      // machine running the IAL is empty.
+      // For a real production scenario, a separate trust store should be
+      // configured.
+      aHCS.setSSLContextTrustAll ();
+    }
     try (final HttpClientManager aHCM = HttpClientManager.create (aHCS))
     {
       for (final String sCOTID : aCOTIDs)
@@ -251,8 +258,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       final ResultListType aRL = aEntry.getValue ();
       for (final MatchType aMatch : aRL.getMatch ())
       {
-        final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT,
-                                                                                                      k -> new CommonsTreeMap <> ());
+        final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT, k -> new CommonsTreeMap <> ());
         for (final EntityType aEntity : aMatch.getEntity ())
         {
           // Match with only one Entity
@@ -284,7 +290,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
           String sMatchAtuCode = CollectionHelper.findFirstMapped (aEntity.getIdentifier (),
                                                                    x -> "atuCode".equals (x.getScheme ()),
-                                                                   x -> x.getValue ());
+                                                                   IDType::getValue);
           if (StringHelper.hasNoText (sMatchAtuCode))
             sMatchAtuCode = sCountryCode;
           final ENutsLevel eNutsLevel = ENutsLevel.getFromLengthOrNull (sMatchAtuCode.length ());
@@ -351,9 +357,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
              * [ { "title": "ES/BirthEvidence/BirthRegister", "parameterList": [
              * { "name": "ES/Register/Volume", "optional": false } ] } ]
              */
-            final IJsonArray aJsonParamSets = JsonReader.builder ()
-                                                        .source (aEntity.getAdditionalInfo ())
-                                                        .readAsArray ();
+            final IJsonArray aJsonParamSets = JsonReader.builder ().source (aEntity.getAdditionalInfo ()).readAsArray ();
             if (aJsonParamSets != null && aJsonParamSets.isNotEmpty ())
             {
               for (final IJsonObject aJsonParamSet : aJsonParamSets.iteratorObjects ())
@@ -410,15 +414,11 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       if (LOGGER.isDebugEnabled ())
         LOGGER.debug ("Rendering response as XML");
 
-      final byte [] aXML = IALMarshaller.idkResponseLookupRoutingInformationMarshaller ()
-                                        .formatted ()
-                                        .getAsBytes (aResponse);
+      final byte [] aXML = IALMarshaller.idkResponseLookupRoutingInformationMarshaller ().formatted ().getAsBytes (aResponse);
       if (aXML == null)
         throw new IALInternalErrorException ("Failed to serialize XML response");
 
-      aPUR.setContent (aXML)
-          .setCharset (XMLWriterSettings.DEFAULT_XML_CHARSET_OBJ)
-          .setMimeType (CMimeType.APPLICATION_XML);
+      aPUR.setContent (aXML).setCharset (XMLWriterSettings.DEFAULT_XML_CHARSET_OBJ).setMimeType (CMimeType.APPLICATION_XML);
     }
 
     aSW.stop ();
