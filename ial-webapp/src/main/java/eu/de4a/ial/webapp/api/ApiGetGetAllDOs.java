@@ -39,6 +39,7 @@ import com.helger.commons.mime.CMimeType;
 import com.helger.commons.string.StringHelper;
 import com.helger.commons.timing.StopWatch;
 import com.helger.commons.url.SimpleURL;
+import com.helger.commons.url.URLHelper;
 import com.helger.http.AcceptMimeTypeList;
 import com.helger.httpclient.HttpClientManager;
 import com.helger.httpclient.HttpClientSettings;
@@ -179,11 +180,12 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     final StopWatch aSW = StopWatch.createdStarted ();
 
     // Get and check parameters
-    final String sCOTIDs = aPathVariables.get ("canonicalObjectTypeIDs");
+    final String sCOTIDs = URLHelper.urlDecode (aPathVariables.get ("canonicalObjectTypeIDs"));
+
     final ICommonsOrderedSet <String> aCOTIDs = new CommonsLinkedHashSet <> ();
     StringHelper.explode (',', sCOTIDs, x -> aCOTIDs.add (x.trim ()));
 
-    final String sAtuCode = m_bWithATUCode ? aPathVariables.get ("atuCode") : null;
+    final String sAtuCode = m_bWithATUCode ? URLHelper.urlDecode (aPathVariables.get ("atuCode")) : null;
 
     if (LOGGER.isInfoEnabled ())
       LOGGER.info ("Querying for " + aCOTIDs + (m_bWithATUCode ? " in ATU code '" + sAtuCode + "'" : ""));
@@ -226,8 +228,18 @@ public class ApiGetGetAllDOs implements IAPIExecutor
         // More than 1000 is not allowed
         aBaseURL.add ("rpc", 100);
         aBaseURL.add ("doctype", sCOTID);
+        String sCountryCode = null;
+        if (m_bWithATUCode)
+        {
+          // Both NUTS and LAU code always start with the country code
+          sCountryCode = sAtuCode.substring (0, 2);
+          aBaseURL.add ("country", sCountryCode);
+        }
 
-        LOGGER.info ("Querying Directory for DocTypeID '" + sCOTID + "'");
+        LOGGER.info ("Querying Directory for DocTypeID '" +
+                     sCOTID +
+                     "'" +
+                     (m_bWithATUCode ? " and country code '" + sCountryCode + "'" : ""));
 
         final HttpGet aGet = new HttpGet (aBaseURL.getAsStringWithEncodedParameters ());
         final Document aResponseXML = aHCM.execute (aGet, new ResponseHandlerXml (false));
@@ -396,6 +408,16 @@ public class ApiGetGetAllDOs implements IAPIExecutor
         aItem.addResponsePerCountry (aPerCountry);
       }
       aResponse.addResponseItem (aItem);
+    }
+
+    if (aResponse.hasNoResponseItemEntries ())
+    {
+      // One error is required to fulfill the XSD requirements
+      aResponse.addError (_createError ("no-match",
+                                        "Found matches searching for '" +
+                                                    sCOTIDs +
+                                                    "'" +
+                                                    (m_bWithATUCode ? " and ATU code '" + sAtuCode + "'" : "")));
     }
 
     final AcceptMimeTypeList aAccept = RequestHelper.getAcceptMimeTypes (aRequestScope.getRequest ());
