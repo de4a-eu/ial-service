@@ -454,7 +454,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     {
       // One error is required to fulfill the XSD requirements
       aResponse.addError (_createError ("no-match",
-                                        "Found matches searching for '" +
+                                        "Found NO matches searching for '" +
                                                     sCOTIDs +
                                                     "'" +
                                                     (m_bWithATUCode ? " and ATU code '" + sAtuCode + "'" : "")));
