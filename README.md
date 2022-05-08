@@ -49,6 +49,8 @@ The Maven BOM can be used like this (replacing `x.y.z` with the real version num
 
 ## News and Noteworthy
 
+* v0.1.6 - work in progress
+    * Removed name prefix `idk` from `IALMarshaller` method
 * v0.1.5 - 2022-05-05
     * Fixed an internal error if no search result was found
     * Added the missing `country` parameter when searching the Directory
