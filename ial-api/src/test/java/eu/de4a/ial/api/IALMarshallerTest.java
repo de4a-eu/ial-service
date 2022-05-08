@@ -77,9 +77,9 @@ public final class IALMarshallerTest
   public void testIDK_LookupRoutingInformation ()
   {
     // Response
-    _testReadWrite (IALMarshaller.idkResponseLookupRoutingInformationMarshaller (),
+    _testReadWrite (IALMarshaller.responseLookupRoutingInformationMarshaller (),
                     new File (BASE_PATH + "IDK-response-routing.xml"));
-    _testReadWrite (IALMarshaller.idkResponseLookupRoutingInformationMarshaller (),
+    _testReadWrite (IALMarshaller.responseLookupRoutingInformationMarshaller (),
                     new File (BASE_PATH + "IDK-response-routing-min.xml"));
   }
 }

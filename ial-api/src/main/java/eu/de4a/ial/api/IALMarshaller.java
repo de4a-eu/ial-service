@@ -74,7 +74,7 @@ public class IALMarshaller <JAXBTYPE> extends GenericJAXBMarshaller <JAXBTYPE>
    * @return A new marshaller for the response. Never <code>null</code>.
    */
   @Nonnull
-  public static IALMarshaller <ResponseLookupRoutingInformationType> idkResponseLookupRoutingInformationMarshaller ()
+  public static IALMarshaller <ResponseLookupRoutingInformationType> responseLookupRoutingInformationMarshaller ()
   {
     return new IALMarshaller <> (ResponseLookupRoutingInformationType.class,
                                  new CommonsArrayList <> (CIALJAXB.XSD_IAL),

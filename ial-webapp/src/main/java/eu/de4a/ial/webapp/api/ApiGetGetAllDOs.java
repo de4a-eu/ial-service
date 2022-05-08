@@ -476,7 +476,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       if (LOGGER.isDebugEnabled ())
         LOGGER.debug (sLogPrefix + "Rendering response as XML");
 
-      final byte [] aXML = IALMarshaller.idkResponseLookupRoutingInformationMarshaller ().formatted ().getAsBytes (aResponse);
+      final byte [] aXML = IALMarshaller.responseLookupRoutingInformationMarshaller ().formatted ().getAsBytes (aResponse);
       if (aXML == null)
         throw new IALInternalErrorException ("Failed to serialize XML response");
 
