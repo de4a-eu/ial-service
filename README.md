@@ -12,6 +12,7 @@ Work in progress
 This project consists of the following submodules:
 
 * `ial-api` - the API level with the technical interfaces. To be used by the Connector
+* `ial-webapp` - the web application of the IAL that takes requests, queries the Directory and enriches the data. To be called by the Connector or by Data Evaluators directly.
 
 ## Maven Coordinates
 
@@ -33,7 +34,33 @@ The Maven BOM can be used like this (replacing `x.y.z` with the real version num
   </dependencyManagement>
 ```
 
-## Configuration parameters
+## WebApp REST APIs
+
+### /api/provision/{canonicalObjectTypeIDs}
+
+Get a list of all participants, that matches any of the Canonical Object Types (Canonical Evidences and Canonical Events)
+in the provided list. Multiple Canonical Object Types can be provided, separated by comma.
+
+Example calls:
+* /provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0
+    * Search for all EPs that support the “Company Registration” evidence type, independent of the country
+* /provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0
+    * Search for all EPs that support the “Marriage Registration” or the “Birth Certificate” evidence type, independent of the country
+
+### /provision/{canonicalObjectTypeIDs}/{atuCode}
+
+Get a list of all participants, that matches any of the Canonical Object Types (Canonical Evidences and Canonical Events)
+in the provided list, filtering it by a target ATU code. Multiple Canonical Object Types can be provided, separated by comma.
+
+Example calls:
+* /provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT
+    * Search for all EPs that support the “Company Registration” evidence type, limit to the matches in Austria
+* /provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT130
+    * Search for all EPs that support the “Company Registration” evidence type, limit to the matches in Vienna, Austria (NUTS 3)
+* /provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0/SE
+    * Search for all EPs that support the “Marriage Registration” or the “Birth Certificate” evidence type, limit to the matches in Sweden
+
+## WebApp Configuration parameters
 
 * **`global.debug`** (boolean) - enable or disable global debug checks in the application. Should only be enabled during development.
 * **`global.production`** (boolean) - enable or disable global functionality only meant to be used in production. Should only be enabled on production systems.
