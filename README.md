@@ -47,7 +47,7 @@ Example calls:
 * /provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0
     * Search for all EPs that support the “Marriage Registration” or the “Birth Certificate” evidence type, independent of the country
 
-### /provision/{canonicalObjectTypeIDs}/{atuCode}
+### /api/provision/{canonicalObjectTypeIDs}/{atuCode}
 
 Get a list of all participants, that matches any of the Canonical Object Types (Canonical Evidences and Canonical Events)
 in the provided list, filtering it by a target ATU code. Multiple Canonical Object Types can be provided, separated by comma.
