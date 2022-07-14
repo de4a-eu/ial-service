@@ -36,29 +36,29 @@ The Maven BOM can be used like this (replacing `x.y.z` with the real version num
 
 ## WebApp REST APIs
 
-### /api/provision/{canonicalObjectTypeIDs}
+### `/api/provision/{canonicalObjectTypeIDs}`
 
 Get a list of all participants, that matches any of the Canonical Object Types (Canonical Evidences and Canonical Events)
 in the provided list. Multiple Canonical Object Types can be provided, separated by comma.
 
 Example calls:
-* /provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0
-    * Search for all EPs that support the “Company Registration” evidence type, independent of the country
-* /provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0
-    * Search for all EPs that support the “Marriage Registration” or the “Birth Certificate” evidence type, independent of the country
+* `/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0`
+    * Search for all EPs that support the "Company Registration" evidence type, independent of the country
+* `/provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0`
+    * Search for all EPs that support the "Marriage Registration" or the "Birth Certificate" evidence type, independent of the country
 
-### /api/provision/{canonicalObjectTypeIDs}/{atuCode}
+### `/api/provision/{canonicalObjectTypeIDs}/{atuCode}`
 
 Get a list of all participants, that matches any of the Canonical Object Types (Canonical Evidences and Canonical Events)
 in the provided list, filtering it by a target ATU code. Multiple Canonical Object Types can be provided, separated by comma.
 
 Example calls:
-* /provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT
-    * Search for all EPs that support the “Company Registration” evidence type, limit to the matches in Austria
-* /provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT130
-    * Search for all EPs that support the “Company Registration” evidence type, limit to the matches in Vienna, Austria (NUTS 3)
-* /provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0/SE
-    * Search for all EPs that support the “Marriage Registration” or the “Birth Certificate” evidence type, limit to the matches in Sweden
+* `/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT`
+    * Search for all EPs that support the "Company Registration" evidence type, limit to the matches in Austria
+* `/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT130`
+    * Search for all EPs that support the "Company Registration" evidence type, limit to the matches in Vienna, Austria (NUTS 3)
+* `/provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0/SE`
+    * Search for all EPs that support the "Marriage Registration" or the "Birth Certificate" evidence type, limit to the matches in Sweden
 
 ## WebApp Configuration parameters
 
