@@ -76,8 +76,9 @@ Example calls:
 
 ## News and Noteworthy
 
-* v0.1.6 - work in progress
+* v0.1.6 - 2022-08-09
     * Removed name prefix `idk` from `IALMarshaller` method
+    * Added the public folder `/mor` to provide the MOR JSON files
 * v0.1.5 - 2022-05-05
     * Fixed an internal error if no search result was found
     * Added the missing `country` parameter when searching the Directory
