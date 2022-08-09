@@ -26,7 +26,7 @@
   </parent>
   <groupId>eu.de4a.ial</groupId>
   <artifactId>ial-parent-pom</artifactId>
-  <version>0.1.6</version>
+  <version>0.1.7-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>ial-parent-pom</name>
   <description>Base POM to build the DE4A IAL projects</description>
@@ -45,7 +45,7 @@
     <connection>scm:git:git@github.com:de4a-wp5/ial-service.git</connection>
     <developerConnection>scm:git:git@github.com:de4a-wp5/ial-service.git</developerConnection>
     <url>http://github.com/de4a-wp5/ial-service</url>
-    <tag>ial-parent-pom-0.1.6</tag>
+    <tag>HEAD</tag>
   </scm>
 
   <organization>
