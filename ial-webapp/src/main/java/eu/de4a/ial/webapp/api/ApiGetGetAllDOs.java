@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nonnull;
 
-import org.apache.http.client.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
