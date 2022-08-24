@@ -78,8 +78,7 @@ public final class IALConfig
   public static void setDefaultConfig ()
   {
     final MultiConfigurationValueProvider aMCSVP = ConfigFactory.createDefaultValueProvider ();
-    final IConfig aConfig = Config.create (aMCSVP);
-    setConfig (aConfig);
+    setConfig (new Config (aMCSVP));
   }
 
   /**
