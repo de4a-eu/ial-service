@@ -37,6 +37,7 @@ import com.helger.commons.collection.impl.CommonsTreeMap;
 import com.helger.commons.collection.impl.ICommonsList;
 import com.helger.commons.collection.impl.ICommonsMap;
 import com.helger.commons.collection.impl.ICommonsOrderedSet;
+import com.helger.commons.http.CHttpHeader;
 import com.helger.commons.mime.CMimeType;
 import com.helger.commons.string.StringHelper;
 import com.helger.commons.timing.StopWatch;
@@ -524,8 +525,12 @@ public class ApiGetGetAllDOs implements IAPIExecutor
           .setMimeType (CMimeType.APPLICATION_XML);
     }
 
+    // Allow CORS safe calls
+    aPUR.addCustomResponseHeader (CHttpHeader.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+
     aSW.stop ();
 
-    LOGGER.info (sLogPrefix + "Successfully finalized querying Directory after " + aSW.getMillis () + "ms");
+    if (LOGGER.isInfoEnabled ())
+      LOGGER.info (sLogPrefix + "Successfully finalized querying Directory after " + aSW.getMillis () + "ms");
   }
 }

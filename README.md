@@ -78,6 +78,7 @@ Example calls:
 
 * v0.1.7 - work in progress
     * Updated to Apache Http Client v5.x
+    * Added response header `Access-Control-Allow-Origin: *` to all queries
 * v0.1.6 - 2022-08-09
     * Removed name prefix `idk` from `IALMarshaller` method
     * Added the public folder `/mor` to provide the MOR JSON files
