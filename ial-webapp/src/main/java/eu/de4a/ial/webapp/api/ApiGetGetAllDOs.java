@@ -16,13 +16,19 @@
  */
 package eu.de4a.ial.webapp.api;
 
+import java.io.IOException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
+import org.apache.hc.client5.http.ClientProtocolException;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -46,7 +52,7 @@ import com.helger.commons.url.URLHelper;
 import com.helger.http.AcceptMimeTypeList;
 import com.helger.httpclient.HttpClientManager;
 import com.helger.httpclient.HttpClientSettings;
-import com.helger.httpclient.response.ResponseHandlerXml;
+import com.helger.httpclient.response.ResponseHandlerHttpEntity;
 import com.helger.json.IJsonArray;
 import com.helger.json.IJsonObject;
 import com.helger.json.JsonArray;
@@ -71,6 +77,7 @@ import com.helger.photon.app.PhotonUnifiedResponse;
 import com.helger.servlet.request.RequestHelper;
 import com.helger.servlet.response.UnifiedResponse;
 import com.helger.web.scope.IRequestWebScopeWithoutResponse;
+import com.helger.xml.serialize.read.DOMReader;
 import com.helger.xml.serialize.write.XMLWriterSettings;
 
 import eu.de4a.ial.api.IALMarshaller;
@@ -178,6 +185,23 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     return s.toUpperCase (Locale.ROOT);
   }
 
+  public static class MyResponseHandlerXml implements HttpClientResponseHandler <Document>
+  {
+    public MyResponseHandlerXml ()
+    {}
+
+    @Nullable
+    public Document handleResponse (@Nonnull final ClassicHttpResponse aHttpResponse) throws IOException
+    {
+      final HttpEntity aEntity = ResponseHandlerHttpEntity.INSTANCE.handleResponse (aHttpResponse);
+      if (aEntity == null)
+        throw new ClientProtocolException ("Response contains no content");
+
+      // Ignore charset
+      return DOMReader.readXMLDOM (aEntity.getContent ());
+    }
+  }
+
   public final void invokeAPI (@Nonnull final IAPIDescriptor aAPIDescriptor,
                                @Nonnull @Nonempty final String sPath,
                                @Nonnull final Map <String, String> aPathVariables,
@@ -266,7 +290,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                        (m_bWithATUCode ? " and country code '" + sCountryCode + "'" : ""));
 
         final HttpGet aGet = new HttpGet (aBaseURL.getAsStringWithEncodedParameters ());
-        final Document aResponseXML = aHCM.execute (aGet, new ResponseHandlerXml (false));
+        final Document aResponseXML = aHCM.execute (aGet, new MyResponseHandlerXml ());
 
         // Parse result
         final ResultListType aResultList = PDSearchAPIReader.resultListV1 ().read (aResponseXML);
