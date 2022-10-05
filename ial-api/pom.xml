@@ -19,7 +19,7 @@
   <parent>
     <groupId>eu.de4a.ial</groupId>
     <artifactId>ial-parent-pom</artifactId>
-    <version>0.1.7-SNAPSHOT</version>
+    <version>0.1.7</version>
   </parent>
   <artifactId>ial-api</artifactId>
   <packaging>bundle</packaging>
