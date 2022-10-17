@@ -17,6 +17,7 @@
 package eu.de4a.ial.webapp.api;
 
 import java.io.IOException;
+import java.security.KeyStore;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -43,6 +44,7 @@ import com.helger.commons.collection.impl.CommonsTreeMap;
 import com.helger.commons.collection.impl.ICommonsList;
 import com.helger.commons.collection.impl.ICommonsMap;
 import com.helger.commons.collection.impl.ICommonsOrderedSet;
+import com.helger.commons.exception.InitializationException;
 import com.helger.commons.http.CHttpHeader;
 import com.helger.commons.mime.CMimeType;
 import com.helger.commons.string.StringHelper;
@@ -70,14 +72,29 @@ import com.helger.pd.searchapi.v1.EntityType;
 import com.helger.pd.searchapi.v1.IDType;
 import com.helger.pd.searchapi.v1.MatchType;
 import com.helger.pd.searchapi.v1.ResultListType;
+import com.helger.peppol.sml.ISMLInfo;
+import com.helger.peppol.sml.SMLInfo;
+import com.helger.peppolid.CIdentifier;
+import com.helger.peppolid.IDocumentTypeIdentifier;
+import com.helger.peppolid.IParticipantIdentifier;
+import com.helger.peppolid.factory.IIdentifierFactory;
+import com.helger.peppolid.factory.SimpleIdentifierFactory;
 import com.helger.photon.api.IAPIDescriptor;
 import com.helger.photon.api.IAPIExecutor;
 import com.helger.photon.app.PhotonUnifiedResponse;
+import com.helger.security.keystore.EKeyStoreType;
+import com.helger.security.keystore.KeyStoreHelper;
+import com.helger.security.keystore.LoadedKeyStore;
 import com.helger.servlet.request.RequestHelper;
 import com.helger.servlet.response.UnifiedResponse;
+import com.helger.smpclient.bdxr1.BDXRClientReadOnly;
+import com.helger.smpclient.exception.SMPClientException;
+import com.helger.smpclient.url.BDXLURLProvider;
 import com.helger.web.scope.IRequestWebScopeWithoutResponse;
 import com.helger.xml.serialize.read.DOMReader;
 import com.helger.xml.serialize.write.XMLWriterSettings;
+import com.helger.xsds.bdxr.smp1.ProcessType;
+import com.helger.xsds.bdxr.smp1.SignedServiceMetadataType;
 
 import eu.de4a.ial.api.IALMarshaller;
 import eu.de4a.ial.api.jaxb.AtuLevelType;
@@ -98,8 +115,38 @@ import eu.de4a.ial.webapp.config.IALHttpClientSettings;
  */
 public class ApiGetGetAllDOs implements IAPIExecutor
 {
+  public static class MyResponseHandlerXml implements HttpClientResponseHandler <Document>
+  {
+    public MyResponseHandlerXml ()
+    {}
+
+    @Nullable
+    public Document handleResponse (@Nonnull final ClassicHttpResponse aHttpResponse) throws IOException
+    {
+      final HttpEntity aEntity = ResponseHandlerHttpEntity.INSTANCE.handleResponse (aHttpResponse);
+      if (aEntity == null)
+        throw new ClientProtocolException ("Response contains no content");
+
+      // Ignore charset
+      return DOMReader.readXMLDOM (aEntity.getContent ());
+    }
+  }
+
   private static final Logger LOGGER = LoggerFactory.getLogger (ApiGetGetAllDOs.class);
   private static final AtomicLong COUNTER = new AtomicLong ();
+  private static final ISMLInfo SML_INFO = new SMLInfo ("sml-de4a",
+                                                        "SML DE4A",
+                                                        "de4a.edelivery.tech.ec.europa.eu.",
+                                                        "https://edelivery.tech.ec.europa.eu/edelivery-sml",
+                                                        true);
+  private static final KeyStore SMP_TRUSTSTORE;
+  static
+  {
+    final LoadedKeyStore aLTS = KeyStoreHelper.loadKeyStore (EKeyStoreType.JKS, "truststore/de4a-truststore-smp-v3-pw-de4a.jks", "de4a");
+    if (aLTS.isFailure ())
+      throw new InitializationException ("Failed to load SMP truststore");
+    SMP_TRUSTSTORE = aLTS.getKeyStore ();
+  }
 
   private final boolean m_bWithATUCode;
 
@@ -181,23 +228,6 @@ public class ApiGetGetAllDOs implements IAPIExecutor
   private static String _unifyATU (@Nonnull final String s)
   {
     return s.toUpperCase (Locale.ROOT);
-  }
-
-  public static class MyResponseHandlerXml implements HttpClientResponseHandler <Document>
-  {
-    public MyResponseHandlerXml ()
-    {}
-
-    @Nullable
-    public Document handleResponse (@Nonnull final ClassicHttpResponse aHttpResponse) throws IOException
-    {
-      final HttpEntity aEntity = ResponseHandlerHttpEntity.INSTANCE.handleResponse (aHttpResponse);
-      if (aEntity == null)
-        throw new ClientProtocolException ("Response contains no content");
-
-      // Ignore charset
-      return DOMReader.readXMLDOM (aEntity.getContent ());
-    }
   }
 
   public final void invokeAPI (@Nonnull final IAPIDescriptor aAPIDescriptor,
@@ -306,11 +336,66 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       {
         if (aMatch.hasNoDocTypeIDEntries ())
         {
-          LOGGER.info ("Skipping result for '" + aMatch.getParticipantIDValue () + "' because no document types are present`.");
+          LOGGER.info ("Skipping result for '" + aMatch.getParticipantIDValue () + "' because no document types are present.");
           continue;
         }
 
-        // Check, if any of the
+        // Check, if any of the document types in
+        {
+          final StopWatch aSW2 = StopWatch.createdStarted ();
+          boolean bAnyDocumentTypeSupportsRequest = false;
+          final IIdentifierFactory aIIF = SimpleIdentifierFactory.INSTANCE;
+          final IParticipantIdentifier aParticipantID = aIIF.createParticipantIdentifier (aMatch.getParticipantID ().getScheme (),
+                                                                                          aMatch.getParticipantID ().getValue ());
+          final BDXRClientReadOnly aSMPClient = new BDXRClientReadOnly (BDXLURLProvider.INSTANCE, aParticipantID, SML_INFO);
+          aSMPClient.httpClientSettings ().setAllFrom (new IALHttpClientSettings ());
+          aSMPClient.setTrustStore (SMP_TRUSTSTORE);
+
+          for (final IDType aDocTypeID : aMatch.getDocTypeID ())
+          {
+            try
+            {
+              // Query all service metadata for this m
+              final IDocumentTypeIdentifier aDocumentTypeID = aIIF.createDocumentTypeIdentifier (aDocTypeID.getScheme (),
+                                                                                                 aDocTypeID.getValue ());
+              final SignedServiceMetadataType aSM = aSMPClient.getServiceMetadataOrNull (aParticipantID, aDocumentTypeID);
+              if (aSM != null && aSM.getServiceMetadata () != null && aSM.getServiceMetadata ().getServiceInformation () != null)
+                for (final ProcessType aProc : aSM.getServiceMetadata ().getServiceInformation ().getProcessList ().getProcess ())
+                {
+                  if ("urn:de4a-eu:MessageType".equals (aProc.getProcessIdentifier ().getScheme ()) &&
+                      "request".equals (aProc.getProcessIdentifier ().getValue ()))
+                  {
+                    LOGGER.info ("Found matching process ID '" +
+                                 CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
+                                                            aProc.getProcessIdentifier ().getValue ()) +
+                                 "'");
+
+                    // First match is enough for us, to continue with the
+                    // participant
+                    bAnyDocumentTypeSupportsRequest = true;
+                    break;
+                  }
+                  if (LOGGER.isDebugEnabled ())
+                    LOGGER.debug ("Skip process ID '" +
+                                  CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
+                                                             aProc.getProcessIdentifier ().getValue ()) +
+                                  "'");
+                }
+            }
+            catch (final SMPClientException ex)
+            {
+              LOGGER.error ("Failed to query SMP: " + ex.getClass ().getName () + " - " + ex.getMessage ());
+            }
+          }
+
+          LOGGER.info ("SMP querying took " + aSW2.stopAndGetMillis () + " milliseconds");
+
+          if (!bAnyDocumentTypeSupportsRequest)
+          {
+            LOGGER.info ("Skipping result for '" + aMatch.getParticipantIDValue () + "' because no matching process ID was found.");
+            continue;
+          }
+        }
 
         for (final EntityType aEntity : aMatch.getEntity ())
         {
