@@ -20,6 +20,9 @@ import java.io.IOException;
 import java.security.KeyStore;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nonnull;
@@ -44,6 +47,7 @@ import com.helger.commons.collection.impl.CommonsTreeMap;
 import com.helger.commons.collection.impl.ICommonsList;
 import com.helger.commons.collection.impl.ICommonsMap;
 import com.helger.commons.collection.impl.ICommonsOrderedSet;
+import com.helger.commons.concurrent.ExecutorServiceHelper;
 import com.helger.commons.exception.InitializationException;
 import com.helger.commons.http.CHttpHeader;
 import com.helger.commons.mime.CMimeType;
@@ -225,9 +229,16 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     return ret;
   }
 
+  @Nonnull
   private static String _unifyATU (@Nonnull final String s)
   {
     return s.toUpperCase (Locale.ROOT);
+  }
+
+  @Nonnull
+  public static String _createCacheKey (@Nonnull final String sParticipantID, @Nonnull final String sDocTypeID)
+  {
+    return sParticipantID + "-" + sDocTypeID;
   }
 
   public final void invokeAPI (@Nonnull final IAPIDescriptor aAPIDescriptor,
@@ -326,6 +337,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     }
 
     // Group results by COT and Country Code
+    final StopWatch aSWGrouping = StopWatch.createdStarted ();
     final ICommonsMap <String, ICommonsMap <String, ICommonsList <MatchType>>> aGroupedMap = new CommonsTreeMap <> ();
     for (final Map.Entry <String, ResultListType> aEntry : aDirectoryResults.entrySet ())
     {
@@ -342,8 +354,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
         // Check, if any of the document types in
         {
-          final StopWatch aSW2 = StopWatch.createdStarted ();
-          boolean bAnyDocumentTypeSupportsRequest = false;
+          final AtomicBoolean aAnyDocumentTypeSupportsRequest = new AtomicBoolean (false);
           final IIdentifierFactory aIIF = SimpleIdentifierFactory.INSTANCE;
           final IParticipantIdentifier aParticipantID = aIIF.createParticipantIdentifier (aMatch.getParticipantID ().getScheme (),
                                                                                           aMatch.getParticipantID ().getValue ());
@@ -351,46 +362,50 @@ public class ApiGetGetAllDOs implements IAPIExecutor
           aSMPClient.httpClientSettings ().setAllFrom (new IALHttpClientSettings ());
           aSMPClient.setTrustStore (SMP_TRUSTSTORE);
 
+          final ExecutorService aES = Executors.newSingleThreadExecutor ();
           for (final IDType aDocTypeID : aMatch.getDocTypeID ())
           {
-            try
-            {
-              // Query all service metadata for this m
-              final IDocumentTypeIdentifier aDocumentTypeID = aIIF.createDocumentTypeIdentifier (aDocTypeID.getScheme (),
-                                                                                                 aDocTypeID.getValue ());
-              final SignedServiceMetadataType aSM = aSMPClient.getServiceMetadataOrNull (aParticipantID, aDocumentTypeID);
-              if (aSM != null && aSM.getServiceMetadata () != null && aSM.getServiceMetadata ().getServiceInformation () != null)
-                for (final ProcessType aProc : aSM.getServiceMetadata ().getServiceInformation ().getProcessList ().getProcess ())
-                {
-                  if ("urn:de4a-eu:MessageType".equals (aProc.getProcessIdentifier ().getScheme ()) &&
-                      "request".equals (aProc.getProcessIdentifier ().getValue ()))
-                  {
-                    LOGGER.info ("Found matching process ID '" +
-                                 CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
-                                                            aProc.getProcessIdentifier ().getValue ()) +
-                                 "'");
+            // Query all service metadata for this Participant
+            final IDocumentTypeIdentifier aDocumentTypeID = aIIF.createDocumentTypeIdentifier (aDocTypeID.getScheme (),
+                                                                                               aDocTypeID.getValue ());
 
-                    // First match is enough for us, to continue with the
-                    // participant
-                    bAnyDocumentTypeSupportsRequest = true;
-                    break;
+            aES.submit ( () -> {
+              try
+              {
+                final SignedServiceMetadataType aSM = aSMPClient.getServiceMetadataOrNull (aParticipantID, aDocumentTypeID);
+                if (aSM != null && aSM.getServiceMetadata () != null && aSM.getServiceMetadata ().getServiceInformation () != null)
+                  for (final ProcessType aProc : aSM.getServiceMetadata ().getServiceInformation ().getProcessList ().getProcess ())
+                  {
+                    if ("urn:de4a-eu:MessageType".equals (aProc.getProcessIdentifier ().getScheme ()) &&
+                        "request".equals (aProc.getProcessIdentifier ().getValue ()))
+                    {
+                      LOGGER.info ("Found matching process ID '" +
+                                   CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
+                                                              aProc.getProcessIdentifier ().getValue ()) +
+                                   "'");
+
+                      // First match is enough for us, to continue with the
+                      // participant
+                      aAnyDocumentTypeSupportsRequest.set (true);
+                      break;
+                    }
+                    if (LOGGER.isDebugEnabled ())
+                      LOGGER.debug ("Skip process ID '" +
+                                    CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
+                                                               aProc.getProcessIdentifier ().getValue ()) +
+                                    "'");
                   }
-                  if (LOGGER.isDebugEnabled ())
-                    LOGGER.debug ("Skip process ID '" +
-                                  CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
-                                                             aProc.getProcessIdentifier ().getValue ()) +
-                                  "'");
-                }
-            }
-            catch (final SMPClientException ex)
-            {
-              LOGGER.error ("Failed to query SMP: " + ex.getClass ().getName () + " - " + ex.getMessage ());
-            }
+              }
+              catch (final SMPClientException ex)
+              {
+                LOGGER.error ("Failed to query SMP: " + ex.getClass ().getName () + " - " + ex.getMessage ());
+              }
+            });
           }
 
-          LOGGER.info ("SMP querying took " + aSW2.stopAndGetMillis () + " milliseconds");
+          ExecutorServiceHelper.shutdownAndWaitUntilAllTasksAreFinished (aES);
 
-          if (!bAnyDocumentTypeSupportsRequest)
+          if (!aAnyDocumentTypeSupportsRequest.get ())
           {
             LOGGER.info ("Skipping result for '" + aMatch.getParticipantIDValue () + "' because no matching process ID was found.");
             continue;
@@ -408,6 +423,8 @@ public class ApiGetGetAllDOs implements IAPIExecutor
         }
       }
     }
+    aSWGrouping.stop ();
+    LOGGER.info ("Grouping with SMP querying querying took " + aSWGrouping.getMillis () + " milliseconds in total");
 
     // fill IAL response data types
     final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
