@@ -126,8 +126,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       final IJsonArray aJsonItems = new JsonArray ();
       for (final ResponseItemType aResponseItem : aResponse.getResponseItem ())
       {
-        final IJsonObject aJsonItem = new JsonObject ().add ("canonicalObjectTypeId",
-                                                             aResponseItem.getCanonicalObjectTypeId ());
+        final IJsonObject aJsonItem = new JsonObject ().add ("canonicalObjectTypeId", aResponseItem.getCanonicalObjectTypeId ());
         final IJsonArray aJsonPerCountries = new JsonArray ();
         for (final ResponsePerCountryType aRPC : aResponseItem.getResponsePerCountry ())
         {
@@ -152,8 +151,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                 aJsonParamSet.addJson ("parameterList",
                                        new JsonArray ().addAllMapped (aParamSet.getParameter (),
                                                                       x -> new JsonObject ().add ("name", x.getName ())
-                                                                                            .add ("optional",
-                                                                                                  x.isOptional ())));
+                                                                                            .add ("optional", x.isOptional ())));
                 aJsonParamSets.add (aJsonParamSet);
               }
               aJsonProvision.addJson ("parameterSets", aJsonParamSets);
@@ -219,14 +217,14 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     // Get and check parameters
     final String sCOTIDs = URLHelper.urlDecode (aPathVariables.get ("canonicalObjectTypeIDs"));
 
+    // Split into 1-n pieces
     final ICommonsOrderedSet <String> aCOTIDs = new CommonsLinkedHashSet <> ();
     StringHelper.explode (',', sCOTIDs, x -> aCOTIDs.add (x.trim ()));
 
     // Ensure the ATU code is upper case for consistent comparison
     final String sAtuCode = m_bWithATUCode ? _unifyATU (URLHelper.urlDecode (aPathVariables.get ("atuCode"))) : null;
 
-    if (LOGGER.isInfoEnabled ())
-      LOGGER.info (sLogPrefix + "Querying for " + aCOTIDs + (m_bWithATUCode ? " in ATU code '" + sAtuCode + "'" : ""));
+    LOGGER.info (sLogPrefix + "Querying for " + aCOTIDs + (m_bWithATUCode ? " in ATU code '" + sAtuCode + "'" : ""));
 
     if (aCOTIDs.isEmpty ())
       throw new IALBadRequestException ("No Canonical Object Type ID was passed", aRequestScope);
@@ -237,19 +235,12 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     {
       // Consistency check
       if (aNutsMgr.isIDValid (sAtuCode))
-      {
-        if (LOGGER.isInfoEnabled ())
-          LOGGER.info (sLogPrefix + "The provided ATU code '" + sAtuCode + "' is a valid NUTS code");
-      }
+        LOGGER.info (sLogPrefix + "The provided ATU code '" + sAtuCode + "' is a valid NUTS code");
       else
         if (aLauMgr.isIDValid (sAtuCode))
-        {
-          if (LOGGER.isInfoEnabled ())
-            LOGGER.info (sLogPrefix + "The provided ATU code '" + sAtuCode + "' is a valid LAU code");
-        }
+          LOGGER.info (sLogPrefix + "The provided ATU code '" + sAtuCode + "' is a valid LAU code");
         else
-          throw new IALBadRequestException ("The provided ATU code '" + sAtuCode + "' is neither a NUTS nor a LAU code",
-                                            aRequestScope);
+          throw new IALBadRequestException ("The provided ATU code '" + sAtuCode + "' is neither a NUTS nor a LAU code", aRequestScope);
     }
 
     // Perform Directory queries
@@ -257,8 +248,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     final HttpClientSettings aHCS = new HttpClientSettings ();
     if (IALConfig.Directory.isTLSTrustAll ())
     {
-      if (LOGGER.isWarnEnabled ())
-        LOGGER.warn (sLogPrefix + "The TLS connection trusts all certificates. That is not very secure.");
+      LOGGER.warn (sLogPrefix + "The TLS connection trusts all certificates. That is not very secure.");
       // This block is not nice but needed, because the system truststore of the
       // machine running the IAL is empty.
       // For a real production scenario, a separate trust store should be
@@ -282,12 +272,11 @@ public class ApiGetGetAllDOs implements IAPIExecutor
           aBaseURL.add ("country", sCountryCode);
         }
 
-        if (LOGGER.isInfoEnabled ())
-          LOGGER.info (sLogPrefix +
-                       "Querying Directory for DocTypeID '" +
-                       sCOTID +
-                       "'" +
-                       (m_bWithATUCode ? " and country code '" + sCountryCode + "'" : ""));
+        LOGGER.info (sLogPrefix +
+                     "Querying Directory for DocTypeID '" +
+                     sCOTID +
+                     "'" +
+                     (m_bWithATUCode ? " and country code '" + sCountryCode + "'" : ""));
 
         final HttpGet aGet = new HttpGet (aBaseURL.getAsStringWithEncodedParameters ());
         final Document aResponseXML = aHCM.execute (aGet, new MyResponseHandlerXml ());
@@ -302,21 +291,18 @@ public class ApiGetGetAllDOs implements IAPIExecutor
         }
         else
         {
-          if (LOGGER.isErrorEnabled ())
-            LOGGER.error (sLogPrefix + "Failed to parse Directory result as XML");
+          LOGGER.error (sLogPrefix + "Failed to parse Directory result as XML");
         }
       }
     }
 
     if (aDirectoryResults.isEmpty ())
     {
-      if (LOGGER.isWarnEnabled ())
-        LOGGER.warn (sLogPrefix + "Found no matches in the Directory");
+      LOGGER.warn (sLogPrefix + "Found no matches in the Directory");
     }
     else
     {
-      if (LOGGER.isInfoEnabled ())
-        LOGGER.info (sLogPrefix + "Collected Directory results: " + aDirectoryResults);
+      LOGGER.info (sLogPrefix + "Collected Directory results: " + aDirectoryResults);
     }
 
     // Group results by COT and Country Code
@@ -324,8 +310,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     for (final Map.Entry <String, ResultListType> aEntry : aDirectoryResults.entrySet ())
     {
       final String sCOT = aEntry.getKey ();
-      final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT,
-                                                                                                    k -> new CommonsTreeMap <> ());
+      final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT, k -> new CommonsTreeMap <> ());
 
       for (final MatchType aMatch : aEntry.getValue ().getMatch ())
       {
@@ -379,25 +364,24 @@ public class ApiGetGetAllDOs implements IAPIExecutor
             // on
             if (!sMatchAtuCode.startsWith (sAtuCode))
             {
-              if (LOGGER.isInfoEnabled ())
-                LOGGER.info (sLogPrefix +
-                             "Igoring result with ATU code '" +
-                             sMatchAtuCode +
-                             "' because it does not match the requested ATU code '" +
-                             sAtuCode +
-                             "'");
+              LOGGER.info (sLogPrefix +
+                           "Igoring result with ATU code '" +
+                           sMatchAtuCode +
+                           "' because it does not match the requested ATU code '" +
+                           sAtuCode +
+                           "'");
               continue;
             }
           }
 
           final ENutsLevel eNutsLevel = ENutsLevel.getFromLengthOrNull (sMatchAtuCode.length ());
-          // Assume "LAUT" if nuts level is null
 
           final ProvisionType aProvision = new ProvisionType ();
           final AtuLevelType eMatchAtuLevel;
           final String sMatchAtuName;
           if (eNutsLevel == null)
           {
+            // Assume "LAU" code if nuts level is null
             // Check if it is a LAU
             final LauItem aLauItem = aLauMgr.getItemOfID (sMatchAtuCode);
             if (aLauItem != null)
@@ -448,16 +432,13 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
           if (StringHelper.hasText (aEntity.getAdditionalInfo ()))
           {
-            if (LOGGER.isInfoEnabled ())
-              LOGGER.info (sLogPrefix + "Trying to parse additional information as JSON");
+            LOGGER.info (sLogPrefix + "Trying to parse additional information as JSON");
 
             /**
              * [ { "title": "ES/BirthEvidence/BirthRegister", "parameterList": [
              * { "name": "ES/Register/Volume", "optional": false } ] } ]
              */
-            final IJsonArray aJsonParamSets = JsonReader.builder ()
-                                                        .source (aEntity.getAdditionalInfo ())
-                                                        .readAsArray ();
+            final IJsonArray aJsonParamSets = JsonReader.builder ().source (aEntity.getAdditionalInfo ()).readAsArray ();
             if (aJsonParamSets != null && aJsonParamSets.isNotEmpty ())
             {
               for (final IJsonObject aJsonParamSet : aJsonParamSets.iteratorObjects ())
@@ -477,30 +458,22 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                     }
 
                   if (StringHelper.hasNoText (aParamSet.getTitle ()))
-                  {
-                    if (LOGGER.isWarnEnabled ())
-                      LOGGER.warn (sLogPrefix + "JSON parameter set object has an empty title");
-                  }
+                    LOGGER.warn (sLogPrefix + "JSON parameter set object has an empty title");
                   else
                     if (aParamSet.hasNoParameterEntries ())
-                    {
-                      if (LOGGER.isWarnEnabled ())
-                        LOGGER.warn (sLogPrefix + "JSON parameter set object has no parameter set entry");
-                    }
+                      LOGGER.warn (sLogPrefix + "JSON parameter set object has no parameter set entry");
                     else
                       aProvision.addParameterSet (aParamSet);
                 }
                 else
                 {
-                  if (LOGGER.isWarnEnabled ())
-                    LOGGER.warn (sLogPrefix + "JSON parameter set object is missing title and/or parameterList");
+                  LOGGER.warn (sLogPrefix + "JSON parameter set object is missing title and/or parameterList");
                 }
               }
             }
             else
             {
-              if (LOGGER.isWarnEnabled ())
-                LOGGER.warn (sLogPrefix + "Failed to read additional information as JSON array");
+              LOGGER.warn (sLogPrefix + "Failed to read additional information as JSON array");
             }
           }
           aPerCountry.addProvision (aProvision);
@@ -538,15 +511,11 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       if (LOGGER.isDebugEnabled ())
         LOGGER.debug (sLogPrefix + "Rendering response as XML");
 
-      final byte [] aXML = IALMarshaller.responseLookupRoutingInformationMarshaller ()
-                                        .formatted ()
-                                        .getAsBytes (aResponse);
+      final byte [] aXML = IALMarshaller.responseLookupRoutingInformationMarshaller ().formatted ().getAsBytes (aResponse);
       if (aXML == null)
         throw new IALInternalErrorException ("Failed to serialize XML response");
 
-      aPUR.setContent (aXML)
-          .setCharset (XMLWriterSettings.DEFAULT_XML_CHARSET_OBJ)
-          .setMimeType (CMimeType.APPLICATION_XML);
+      aPUR.setContent (aXML).setCharset (XMLWriterSettings.DEFAULT_XML_CHARSET_OBJ).setMimeType (CMimeType.APPLICATION_XML);
     }
 
     // Allow CORS safe calls
@@ -554,7 +523,6 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
     aSW.stop ();
 
-    if (LOGGER.isInfoEnabled ())
-      LOGGER.info (sLogPrefix + "Successfully finalized querying Directory after " + aSW.getMillis () + "ms");
+    LOGGER.info (sLogPrefix + "Successfully finalized querying Directory after " + aSW.getMillis () + "ms");
   }
 }
