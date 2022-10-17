@@ -51,7 +51,6 @@ import com.helger.commons.url.SimpleURL;
 import com.helger.commons.url.URLHelper;
 import com.helger.http.AcceptMimeTypeList;
 import com.helger.httpclient.HttpClientManager;
-import com.helger.httpclient.HttpClientSettings;
 import com.helger.httpclient.response.ResponseHandlerHttpEntity;
 import com.helger.json.IJsonArray;
 import com.helger.json.IJsonObject;
@@ -90,6 +89,7 @@ import eu.de4a.ial.api.jaxb.ResponseItemType;
 import eu.de4a.ial.api.jaxb.ResponseLookupRoutingInformationType;
 import eu.de4a.ial.api.jaxb.ResponsePerCountryType;
 import eu.de4a.ial.webapp.config.IALConfig;
+import eu.de4a.ial.webapp.config.IALHttpClientSettings;
 
 /**
  * Provide the public query API
@@ -245,17 +245,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
     // Perform Directory queries
     final ICommonsMap <String, ResultListType> aDirectoryResults = new CommonsHashMap <> ();
-    final HttpClientSettings aHCS = new HttpClientSettings ();
-    if (IALConfig.Directory.isTLSTrustAll ())
-    {
-      LOGGER.warn (sLogPrefix + "The TLS connection trusts all certificates. That is not very secure.");
-      // This block is not nice but needed, because the system truststore of the
-      // machine running the IAL is empty.
-      // For a real production scenario, a separate trust store should be
-      // configured.
-      aHCS.setSSLContextTrustAll ();
-    }
-    try (final HttpClientManager aHCM = HttpClientManager.create (aHCS))
+    try (final HttpClientManager aHCM = HttpClientManager.create (new IALHttpClientSettings ()))
     {
       for (final String sCOTID : aCOTIDs)
       {
@@ -314,6 +304,14 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
       for (final MatchType aMatch : aEntry.getValue ().getMatch ())
       {
+        if (aMatch.hasNoDocTypeIDEntries ())
+        {
+          LOGGER.info ("Skipping result for '" + aMatch.getParticipantIDValue () + "' because no document types are present`.");
+          continue;
+        }
+
+        // Check, if any of the
+
         for (final EntityType aEntity : aMatch.getEntity ())
         {
           // Match with only one Entity
@@ -432,6 +430,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
           if (StringHelper.hasText (aEntity.getAdditionalInfo ()))
           {
+            // Parse additional, optional, JSON - unlikely to ever be used
             LOGGER.info (sLogPrefix + "Trying to parse additional information as JSON");
 
             /**
