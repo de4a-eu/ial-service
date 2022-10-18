@@ -22,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -51,6 +52,7 @@ import com.helger.commons.concurrent.ExecutorServiceHelper;
 import com.helger.commons.exception.InitializationException;
 import com.helger.commons.http.CHttpHeader;
 import com.helger.commons.mime.CMimeType;
+import com.helger.commons.state.ETriState;
 import com.helger.commons.string.StringHelper;
 import com.helger.commons.timing.StopWatch;
 import com.helger.commons.url.SimpleURL;
@@ -92,7 +94,6 @@ import com.helger.security.keystore.LoadedKeyStore;
 import com.helger.servlet.request.RequestHelper;
 import com.helger.servlet.response.UnifiedResponse;
 import com.helger.smpclient.bdxr1.BDXRClientReadOnly;
-import com.helger.smpclient.exception.SMPClientException;
 import com.helger.smpclient.url.BDXLURLProvider;
 import com.helger.web.scope.IRequestWebScopeWithoutResponse;
 import com.helger.xml.serialize.read.DOMReader;
@@ -146,7 +147,9 @@ public class ApiGetGetAllDOs implements IAPIExecutor
   private static final KeyStore SMP_TRUSTSTORE;
   static
   {
-    final LoadedKeyStore aLTS = KeyStoreHelper.loadKeyStore (EKeyStoreType.JKS, "truststore/de4a-truststore-smp-v3-pw-de4a.jks", "de4a");
+    final LoadedKeyStore aLTS = KeyStoreHelper.loadKeyStore (EKeyStoreType.JKS,
+                                                             "truststore/de4a-truststore-smp-v3-pw-de4a.jks",
+                                                             "de4a");
     if (aLTS.isFailure ())
       throw new InitializationException ("Failed to load SMP truststore");
     SMP_TRUSTSTORE = aLTS.getKeyStore ();
@@ -177,7 +180,8 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       final IJsonArray aJsonItems = new JsonArray ();
       for (final ResponseItemType aResponseItem : aResponse.getResponseItem ())
       {
-        final IJsonObject aJsonItem = new JsonObject ().add ("canonicalObjectTypeId", aResponseItem.getCanonicalObjectTypeId ());
+        final IJsonObject aJsonItem = new JsonObject ().add ("canonicalObjectTypeId",
+                                                             aResponseItem.getCanonicalObjectTypeId ());
         final IJsonArray aJsonPerCountries = new JsonArray ();
         for (final ResponsePerCountryType aRPC : aResponseItem.getResponsePerCountry ())
         {
@@ -202,7 +206,8 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                 aJsonParamSet.addJson ("parameterList",
                                        new JsonArray ().addAllMapped (aParamSet.getParameter (),
                                                                       x -> new JsonObject ().add ("name", x.getName ())
-                                                                                            .add ("optional", x.isOptional ())));
+                                                                                            .add ("optional",
+                                                                                                  x.isOptional ())));
                 aJsonParamSets.add (aJsonParamSet);
               }
               aJsonProvision.addJson ("parameterSets", aJsonParamSets);
@@ -281,7 +286,8 @@ public class ApiGetGetAllDOs implements IAPIExecutor
         if (aLauMgr.isIDValid (sAtuCode))
           LOGGER.info (sLogPrefix + "The provided ATU code '" + sAtuCode + "' is a valid LAU code");
         else
-          throw new IALBadRequestException ("The provided ATU code '" + sAtuCode + "' is neither a NUTS nor a LAU code", aRequestScope);
+          throw new IALBadRequestException ("The provided ATU code '" + sAtuCode + "' is neither a NUTS nor a LAU code",
+                                            aRequestScope);
     }
 
     // Perform Directory queries
@@ -342,13 +348,16 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     for (final Map.Entry <String, ResultListType> aEntry : aDirectoryResults.entrySet ())
     {
       final String sCOT = aEntry.getKey ();
-      final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT, k -> new CommonsTreeMap <> ());
+      final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT,
+                                                                                                    k -> new CommonsTreeMap <> ());
 
       for (final MatchType aMatch : aEntry.getValue ().getMatch ())
       {
         if (aMatch.hasNoDocTypeIDEntries ())
         {
-          LOGGER.info ("Skipping result for '" + aMatch.getParticipantIDValue () + "' because no document types are present.");
+          LOGGER.info ("Skipping result for '" +
+                       aMatch.getParticipantIDValue () +
+                       "' because no document types are present.");
           continue;
         }
 
@@ -356,58 +365,85 @@ public class ApiGetGetAllDOs implements IAPIExecutor
         {
           final AtomicBoolean aAnyDocumentTypeSupportsRequest = new AtomicBoolean (false);
           final IIdentifierFactory aIIF = SimpleIdentifierFactory.INSTANCE;
-          final IParticipantIdentifier aParticipantID = aIIF.createParticipantIdentifier (aMatch.getParticipantID ().getScheme (),
-                                                                                          aMatch.getParticipantID ().getValue ());
-          final BDXRClientReadOnly aSMPClient = new BDXRClientReadOnly (BDXLURLProvider.INSTANCE, aParticipantID, SML_INFO);
-          aSMPClient.httpClientSettings ().setAllFrom (new IALHttpClientSettings ());
-          aSMPClient.setTrustStore (SMP_TRUSTSTORE);
+          final IParticipantIdentifier aParticipantID = aIIF.createParticipantIdentifier (aMatch.getParticipantID ()
+                                                                                                .getScheme (),
+                                                                                          aMatch.getParticipantID ()
+                                                                                                .getValue ());
+          BDXRClientReadOnly aSMPClient = null;
 
-          final ExecutorService aES = Executors.newSingleThreadExecutor ();
+          final ExecutorService aES = Executors.newFixedThreadPool (4);
           for (final IDType aDocTypeID : aMatch.getDocTypeID ())
           {
             // Query all service metadata for this Participant
             final IDocumentTypeIdentifier aDocumentTypeID = aIIF.createDocumentTypeIdentifier (aDocTypeID.getScheme (),
                                                                                                aDocTypeID.getValue ());
 
-            aES.submit ( () -> {
-              try
+            final ETriState eState = IALCache.getState (aParticipantID, aDocumentTypeID);
+            if (eState != ETriState.UNDEFINED)
+            {
+              aAnyDocumentTypeSupportsRequest.set (eState.getAsBooleanValue ());
+            }
+            else
+            {
+              // Avoid creating SMP client, if everything is in the cache to
+              // avoid the DNS NAPTR lookup
+              if (aSMPClient == null)
               {
-                final SignedServiceMetadataType aSM = aSMPClient.getServiceMetadataOrNull (aParticipantID, aDocumentTypeID);
-                if (aSM != null && aSM.getServiceMetadata () != null && aSM.getServiceMetadata ().getServiceInformation () != null)
-                  for (final ProcessType aProc : aSM.getServiceMetadata ().getServiceInformation ().getProcessList ().getProcess ())
-                  {
-                    if ("urn:de4a-eu:MessageType".equals (aProc.getProcessIdentifier ().getScheme ()) &&
-                        "request".equals (aProc.getProcessIdentifier ().getValue ()))
-                    {
-                      LOGGER.info ("Found matching process ID '" +
-                                   CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
-                                                              aProc.getProcessIdentifier ().getValue ()) +
-                                   "'");
+                aSMPClient = new BDXRClientReadOnly (BDXLURLProvider.INSTANCE, aParticipantID, SML_INFO);
+                aSMPClient.httpClientSettings ().setAllFrom (new IALHttpClientSettings ());
+                aSMPClient.setTrustStore (SMP_TRUSTSTORE);
+              }
+              final BDXRClientReadOnly aFinalSMPClient = aSMPClient;
 
-                      // First match is enough for us, to continue with the
-                      // participant
-                      aAnyDocumentTypeSupportsRequest.set (true);
-                      break;
+              aES.submit ( () -> {
+                try
+                {
+                  final SignedServiceMetadataType aSM = aFinalSMPClient.getServiceMetadataOrNull (aParticipantID,
+                                                                                                  aDocumentTypeID);
+                  if (aSM != null &&
+                      aSM.getServiceMetadata () != null &&
+                      aSM.getServiceMetadata ().getServiceInformation () != null)
+                    for (final ProcessType aProc : aSM.getServiceMetadata ()
+                                                      .getServiceInformation ()
+                                                      .getProcessList ()
+                                                      .getProcess ())
+                    {
+                      if ("urn:de4a-eu:MessageType".equals (aProc.getProcessIdentifier ().getScheme ()) &&
+                          "request".equals (aProc.getProcessIdentifier ().getValue ()))
+                      {
+                        LOGGER.info ("Found matching process ID '" +
+                                     CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
+                                                                aProc.getProcessIdentifier ().getValue ()) +
+                                     "'");
+
+                        // First match is enough for us, to continue with the
+                        // participant
+                        aAnyDocumentTypeSupportsRequest.set (true);
+                        break;
+                      }
+                      if (LOGGER.isDebugEnabled ())
+                        LOGGER.debug ("Skip process ID '" +
+                                      CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
+                                                                 aProc.getProcessIdentifier ().getValue ()) +
+                                      "'");
                     }
-                    if (LOGGER.isDebugEnabled ())
-                      LOGGER.debug ("Skip process ID '" +
-                                    CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
-                                                               aProc.getProcessIdentifier ().getValue ()) +
-                                    "'");
-                  }
-              }
-              catch (final SMPClientException ex)
-              {
-                LOGGER.error ("Failed to query SMP: " + ex.getClass ().getName () + " - " + ex.getMessage ());
-              }
-            });
+                }
+                catch (final Exception ex)
+                {
+                  LOGGER.error ("Failed to query SMP: " + ex.getClass ().getName () + " - " + ex.getMessage ());
+                }
+                IALCache.cacheState (aParticipantID, aDocumentTypeID, aAnyDocumentTypeSupportsRequest.get ());
+              });
+            }
           }
 
-          ExecutorServiceHelper.shutdownAndWaitUntilAllTasksAreFinished (aES);
+          ExecutorServiceHelper.shutdownAndWaitUntilAllTasksAreFinished (aES, 100, TimeUnit.MILLISECONDS);
 
           if (!aAnyDocumentTypeSupportsRequest.get ())
           {
-            LOGGER.info ("Skipping result for '" + aMatch.getParticipantIDValue () + "' because no matching process ID was found.");
+            LOGGER.info ("Skipping result for '" +
+                         aMatch.getParticipantIDValue () +
+                         "' because no matching process ID was found.");
             continue;
           }
         }
@@ -539,7 +575,9 @@ public class ApiGetGetAllDOs implements IAPIExecutor
              * [ { "title": "ES/BirthEvidence/BirthRegister", "parameterList": [
              * { "name": "ES/Register/Volume", "optional": false } ] } ]
              */
-            final IJsonArray aJsonParamSets = JsonReader.builder ().source (aEntity.getAdditionalInfo ()).readAsArray ();
+            final IJsonArray aJsonParamSets = JsonReader.builder ()
+                                                        .source (aEntity.getAdditionalInfo ())
+                                                        .readAsArray ();
             if (aJsonParamSets != null && aJsonParamSets.isNotEmpty ())
             {
               for (final IJsonObject aJsonParamSet : aJsonParamSets.iteratorObjects ())
@@ -612,11 +650,15 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       if (LOGGER.isDebugEnabled ())
         LOGGER.debug (sLogPrefix + "Rendering response as XML");
 
-      final byte [] aXML = IALMarshaller.responseLookupRoutingInformationMarshaller ().formatted ().getAsBytes (aResponse);
+      final byte [] aXML = IALMarshaller.responseLookupRoutingInformationMarshaller ()
+                                        .formatted ()
+                                        .getAsBytes (aResponse);
       if (aXML == null)
         throw new IALInternalErrorException ("Failed to serialize XML response");
 
-      aPUR.setContent (aXML).setCharset (XMLWriterSettings.DEFAULT_XML_CHARSET_OBJ).setMimeType (CMimeType.APPLICATION_XML);
+      aPUR.setContent (aXML)
+          .setCharset (XMLWriterSettings.DEFAULT_XML_CHARSET_OBJ)
+          .setMimeType (CMimeType.APPLICATION_XML);
     }
 
     // Allow CORS safe calls
