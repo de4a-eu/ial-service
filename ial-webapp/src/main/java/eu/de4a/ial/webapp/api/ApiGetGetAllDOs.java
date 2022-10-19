@@ -125,10 +125,10 @@ public class ApiGetGetAllDOs implements IAPIExecutor
   static
   {
     final LoadedKeyStore aLTS = KeyStoreHelper.loadKeyStore (EKeyStoreType.JKS,
-                                                             "truststore/de4a-truststore-smp-v3-pw-de4a.jks",
-                                                             "de4a");
+                                                             IALConfig.SMP.getTruststorePath (),
+                                                             IALConfig.SMP.getTruststorePassword ());
     if (aLTS.isFailure ())
-      throw new InitializationException ("Failed to load SMP truststore");
+      throw new InitializationException ("Failed to load SMP truststore '" + IALConfig.SMP.getTruststorePath () + "'");
     SMP_TRUSTSTORE = aLTS.getKeyStore ();
   }
 

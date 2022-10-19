@@ -226,4 +226,22 @@ public final class IALConfig
       return getConfig ().getAsString ("ial.webapp.data.path");
     }
   }
+
+  public static final class SMP
+  {
+    private SMP ()
+    {}
+
+    @Nullable
+    public static String getTruststorePath ()
+    {
+      return getConfig ().getAsString ("ial.smp.truststore.path");
+    }
+
+    @Nullable
+    public static String getTruststorePassword ()
+    {
+      return getConfig ().getAsString ("ial.smp.truststore.password");
+    }
+  }
 }
