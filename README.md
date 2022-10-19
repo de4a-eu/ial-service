@@ -76,6 +76,8 @@ Example calls:
 
 ## News and Noteworthy
 
+* v0.1.9 - 2022-10-19
+    * Made the SMP truststore configurable via the properties `ial.smp.truststore.path` and `ial.smp.truststore.password`
 * v0.1.8 - 2022-10-18
     * The IAL filters out all participant identifiers that does not support the process ID "urn:de4a-eu:MessageType::Request" with the idea that only DOs are left
 * v0.1.7 - 2022-10-05
