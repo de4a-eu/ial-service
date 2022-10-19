@@ -16,7 +16,6 @@
  */
 package eu.de4a.ial.webapp.api;
 
-import java.io.IOException;
 import java.security.KeyStore;
 import java.util.Locale;
 import java.util.Map;
@@ -24,16 +23,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
-import org.apache.hc.client5.http.ClientProtocolException;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.core5.http.ClassicHttpResponse;
-import org.apache.hc.core5.http.HttpEntity;
-import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -59,7 +54,7 @@ import com.helger.commons.url.SimpleURL;
 import com.helger.commons.url.URLHelper;
 import com.helger.http.AcceptMimeTypeList;
 import com.helger.httpclient.HttpClientManager;
-import com.helger.httpclient.response.ResponseHandlerHttpEntity;
+import com.helger.httpclient.response.ResponseHandlerXml;
 import com.helger.json.IJsonArray;
 import com.helger.json.IJsonObject;
 import com.helger.json.JsonArray;
@@ -96,7 +91,6 @@ import com.helger.servlet.response.UnifiedResponse;
 import com.helger.smpclient.bdxr1.BDXRClientReadOnly;
 import com.helger.smpclient.url.BDXLURLProvider;
 import com.helger.web.scope.IRequestWebScopeWithoutResponse;
-import com.helger.xml.serialize.read.DOMReader;
 import com.helger.xml.serialize.write.XMLWriterSettings;
 import com.helger.xsds.bdxr.smp1.ProcessType;
 import com.helger.xsds.bdxr.smp1.SignedServiceMetadataType;
@@ -120,23 +114,6 @@ import eu.de4a.ial.webapp.config.IALHttpClientSettings;
  */
 public class ApiGetGetAllDOs implements IAPIExecutor
 {
-  public static class MyResponseHandlerXml implements HttpClientResponseHandler <Document>
-  {
-    public MyResponseHandlerXml ()
-    {}
-
-    @Nullable
-    public Document handleResponse (@Nonnull final ClassicHttpResponse aHttpResponse) throws IOException
-    {
-      final HttpEntity aEntity = ResponseHandlerHttpEntity.INSTANCE.handleResponse (aHttpResponse);
-      if (aEntity == null)
-        throw new ClientProtocolException ("Response contains no content");
-
-      // Ignore charset
-      return DOMReader.readXMLDOM (aEntity.getContent ());
-    }
-  }
-
   private static final Logger LOGGER = LoggerFactory.getLogger (ApiGetGetAllDOs.class);
   private static final AtomicLong COUNTER = new AtomicLong ();
   private static final ISMLInfo SML_INFO = new SMLInfo ("sml-de4a",
@@ -316,7 +293,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                      (m_bWithATUCode ? " and country code '" + sCountryCode + "'" : ""));
 
         final HttpGet aGet = new HttpGet (aBaseURL.getAsStringWithEncodedParameters ());
-        final Document aResponseXML = aHCM.execute (aGet, new MyResponseHandlerXml ());
+        final Document aResponseXML = aHCM.execute (aGet, new ResponseHandlerXml (false));
 
         // Parse result
         final ResultListType aResultList = PDSearchAPIReader.resultListV1 ().read (aResponseXML);
@@ -344,6 +321,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
     // Group results by COT and Country Code
     final StopWatch aSWGrouping = StopWatch.createdStarted ();
+    final AtomicInteger aSMPCallCount = new AtomicInteger (0);
     final ICommonsMap <String, ICommonsMap <String, ICommonsList <MatchType>>> aGroupedMap = new CommonsTreeMap <> ();
     for (final Map.Entry <String, ResultListType> aEntry : aDirectoryResults.entrySet ())
     {
@@ -398,6 +376,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
               aES.submit ( () -> {
                 try
                 {
+                  aSMPCallCount.incrementAndGet ();
                   final SignedServiceMetadataType aSM = aFinalSMPClient.getServiceMetadataOrNull (aParticipantID,
                                                                                                   aDocumentTypeID);
                   if (aSM != null &&
@@ -460,7 +439,11 @@ public class ApiGetGetAllDOs implements IAPIExecutor
       }
     }
     aSWGrouping.stop ();
-    LOGGER.info ("Grouping with SMP querying querying took " + aSWGrouping.getMillis () + " milliseconds in total");
+    LOGGER.info ("Grouping with " +
+                 aSMPCallCount.intValue () +
+                 " SMP queries took " +
+                 aSWGrouping.getMillis () +
+                 " milliseconds in total");
 
     // fill IAL response data types
     final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
