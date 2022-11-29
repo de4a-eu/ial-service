@@ -104,4 +104,9 @@ public final class IALCache
 
     RW_LOCK.writeLocked ( () -> MAP.put (sKey, new CacheValue (bState)));
   }
+
+  public static void clearCache ()
+  {
+    RW_LOCK.writeLocked ( () -> MAP.clear ());
+  }
 }
