@@ -60,6 +60,18 @@ Example calls:
 * `/provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0/SE`
     * Search for all EPs that support the "Marriage Registration" or the "Birth Certificate" evidence type, limit to the matches in Sweden
 
+## `/mor/xx.json`
+
+Get the MOR data for the provided country code `xx`.
+Available country codes (case sensitive):
+* `en` - English
+* `es` - Spanish
+* `fr` - French
+* `pt` - Portuguese
+* `ro` - Romanian
+* `sl` - Slovenian
+
+
 ## WebApp Configuration parameters
 
 * **`global.debug`** (boolean) - enable or disable global debug checks in the application. Should only be enabled during development.
