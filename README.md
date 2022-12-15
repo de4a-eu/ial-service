@@ -88,6 +88,10 @@ Available country codes (case sensitive):
 
 ## News and Noteworthy
 
+* v0.1.10 - 2022-12-15
+    * Fixed an issue with search results if CanonicalEvidenceType and ATU code were provided together
+    * Improved internal error resilience
+    * Added new internal API `/internal/clear-smpclient-cache` to clear the IAL SMP client lookup cache 
 * v0.1.9 - 2022-10-19
     * Made the SMP truststore configurable via the properties `ial.smp.truststore.path` and `ial.smp.truststore.password`
 * v0.1.8 - 2022-10-18
