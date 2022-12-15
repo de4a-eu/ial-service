@@ -108,6 +108,11 @@ public final class IALCache
   public static void clearCache ()
   {
     LOGGER.info ("Clearing IAL cache");
-    RW_LOCK.writeLocked ( () -> MAP.clear ());
+    final int ret = RW_LOCK.writeLockedInt ( () -> {
+      final int ret2 = MAP.size ();
+      MAP.clear ();
+      return ret2;
+    });
+    LOGGER.info ("Finished clearing IAL cache - " + ret + " entries evicted");
   }
 }
