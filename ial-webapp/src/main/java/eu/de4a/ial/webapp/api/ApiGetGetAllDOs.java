@@ -467,7 +467,9 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                 LOGGER.info (sLogPrefix +
                              "Skipping Entity, because it doesn't match country code '" +
                              sCountryCode +
-                             "'");
+                             "' (has '" +
+                             aEntity.getCountryCode () +
+                             "')");
                 continue;
               }
             }
