@@ -34,6 +34,7 @@ import com.helger.photon.audit.LoggingAuditor;
 import com.helger.photon.core.servlet.WebAppListener;
 import com.helger.photon.security.login.LoggedInUserManager;
 
+import eu.de4a.ial.webapp.api.ApiClearSmpClientCache;
 import eu.de4a.ial.webapp.api.ApiGetGetAllDOs;
 import eu.de4a.ial.webapp.api.IALRestExceptionMapper;
 import eu.de4a.ial.webapp.config.IALConfig;
@@ -105,6 +106,8 @@ public class IALWebAppListener extends WebAppListener
                                                  new ApiGetGetAllDOs (false)).setExceptionMapper (aExceptionMapper));
     aAPIRegistry.registerAPI (new APIDescriptor (APIPath.get ("/provision/{canonicalObjectTypeIDs}/{atuCode}"),
                                                  new ApiGetGetAllDOs (true)).setExceptionMapper (aExceptionMapper));
+    aAPIRegistry.registerAPI (new APIDescriptor (APIPath.get ("/internal/clear-smpclient-cache"),
+                                                 new ApiClearSmpClientCache ()).setExceptionMapper (aExceptionMapper));
   }
 
   @Override

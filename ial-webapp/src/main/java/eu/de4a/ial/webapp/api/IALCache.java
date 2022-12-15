@@ -107,6 +107,7 @@ public final class IALCache
 
   public static void clearCache ()
   {
+    LOGGER.info ("Clearing IAL cache");
     RW_LOCK.writeLocked ( () -> MAP.clear ());
   }
 }
