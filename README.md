@@ -42,9 +42,9 @@ Get a list of all participants, that matches any of the Canonical Object Types (
 in the provided list. Multiple Canonical Object Types can be provided, separated by comma.
 
 Example calls:
-* `/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0`
+* `/api/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0`
     * Search for all EPs that support the "Company Registration" evidence type, independent of the country
-* `/provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0`
+* `/api/provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0`
     * Search for all EPs that support the "Marriage Registration" or the "Birth Certificate" evidence type, independent of the country
 
 ### `/api/provision/{canonicalObjectTypeIDs}/{atuCode}`
@@ -53,11 +53,11 @@ Get a list of all participants, that matches any of the Canonical Object Types (
 in the provided list, filtering it by a target ATU code. Multiple Canonical Object Types can be provided, separated by comma.
 
 Example calls:
-* `/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT`
+* `/api/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT`
     * Search for all EPs that support the "Company Registration" evidence type, limit to the matches in Austria
-* `/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT130`
+* `/api/provision/urn:de4a-eu:CanonicalEvidenceType::CompanyRegistration:1.0/AT130`
     * Search for all EPs that support the "Company Registration" evidence type, limit to the matches in Vienna, Austria (NUTS 3)
-* `/provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0/SE`
+* `/api/provision/urn:de4a-eu:CanonicalEvidenceType::MarriageRegistration:1.0,urn:de4a-eu:CanonicalEvidenceType::BirthCertificate:1.0/SE`
     * Search for all EPs that support the "Marriage Registration" or the "Birth Certificate" evidence type, limit to the matches in Sweden
 
 ## `/mor/xx.json`
@@ -88,6 +88,8 @@ Available country codes (case sensitive):
 
 ## News and Noteworthy
 
+* v0.1.11 - 2023-02-25
+    * Fixed the result match making of `/api/provision` calls - corrected and more efficient
 * v0.1.10 - 2022-12-15
     * Fixed an issue with search results if CanonicalEvidenceType and ATU code were provided together
     * Improved internal error resilience
