@@ -33,6 +33,7 @@ import com.helger.photon.audit.AuditHelper;
 import com.helger.photon.audit.LoggingAuditor;
 import com.helger.photon.core.servlet.WebAppListener;
 import com.helger.photon.security.login.LoggedInUserManager;
+import com.helger.xservlet.requesttrack.RequestTrackerSettings;
 
 import eu.de4a.ial.webapp.api.ApiClearSmpClientCache;
 import eu.de4a.ial.webapp.api.ApiGetGetAllDOs;
@@ -89,6 +90,9 @@ public class IALWebAppListener extends WebAppListener
     if (StringHelper.hasNoText (sDirectoryBaseURL))
       throw new InitializationException ("The Directory base URL configuration is missing");
     LOGGER.info ("Using '" + sDirectoryBaseURL + "' as the Directory base URL");
+
+    RequestTrackerSettings.setLongRunningRequestsCheckEnabled (false);
+    RequestTrackerSettings.setParallelRunningRequestsCheckEnabled (false);
   }
 
   @Override

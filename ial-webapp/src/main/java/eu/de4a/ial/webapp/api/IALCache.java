@@ -6,6 +6,7 @@ import java.util.Map;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.GuardedBy;
+import javax.annotation.concurrent.ThreadSafe;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,13 @@ import com.helger.commons.state.ETriState;
 import com.helger.peppolid.IDocumentTypeIdentifier;
 import com.helger.peppolid.IParticipantIdentifier;
 
+/**
+ * IAL cache. From "Participant ID" and "Document Type ID" to the status if it
+ * was found or not.
+ *
+ * @author Philip Helger
+ */
+@ThreadSafe
 public final class IALCache
 {
   private static final class CacheValue
@@ -63,9 +71,7 @@ public final class IALCache
     return aParticipantID.getURIEncoded () + "@" + aDocumentTypeID.getURIEncoded ();
   }
 
-  @Nonnull
-  public static ETriState getState (@Nonnull final IParticipantIdentifier aParticipantID,
-                                    @Nonnull final IDocumentTypeIdentifier aDocumentTypeID)
+  private static void _removeExpiredCacheEntries ()
   {
     final LocalDateTime aNow = PDTFactory.getCurrentLocalDateTime ();
 
@@ -74,8 +80,8 @@ public final class IALCache
     {
       LOGGER.info ("Expiring IAL SMP cache entries if necessary");
       RW_LOCK.writeLocked ( () -> {
-        // Iterate on copy
         int nExpired = 0;
+        // Iterate on copy
         for (final Map.Entry <String, CacheValue> aEntry : new CommonsHashSet <> (MAP.entrySet ()))
           if (aEntry.getValue ().isExpiredAt (aNow))
           {
@@ -89,6 +95,13 @@ public final class IALCache
           LOGGER.info ("Expired " + nExpired + " IAL SMP cache entries. " + MAP.size () + " entries left");
       });
     }
+  }
+
+  @Nonnull
+  public static ETriState getState (@Nonnull final IParticipantIdentifier aParticipantID,
+                                    @Nonnull final IDocumentTypeIdentifier aDocumentTypeID)
+  {
+    _removeExpiredCacheEntries ();
 
     // Main cache lookup
     final String sKey = _getKey (aParticipantID, aDocumentTypeID);
@@ -98,11 +111,11 @@ public final class IALCache
 
   public static void cacheState (@Nonnull final IParticipantIdentifier aParticipantID,
                                  @Nonnull final IDocumentTypeIdentifier aDocumentTypeID,
-                                 final boolean bState)
+                                 final boolean bFound)
   {
     final String sKey = _getKey (aParticipantID, aDocumentTypeID);
 
-    RW_LOCK.writeLocked ( () -> MAP.put (sKey, new CacheValue (bState)));
+    RW_LOCK.writeLocked ( () -> MAP.put (sKey, new CacheValue (bFound)));
   }
 
   public static void clearCache ()

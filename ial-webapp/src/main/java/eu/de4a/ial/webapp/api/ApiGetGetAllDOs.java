@@ -16,17 +16,17 @@
  */
 package eu.de4a.ial.webapp.api;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
+import javax.annotation.Nonnegative;
 import javax.annotation.Nonnull;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -44,8 +44,6 @@ import com.helger.commons.collection.impl.CommonsTreeMap;
 import com.helger.commons.collection.impl.ICommonsList;
 import com.helger.commons.collection.impl.ICommonsMap;
 import com.helger.commons.collection.impl.ICommonsOrderedSet;
-import com.helger.commons.concurrent.ExecutorServiceHelper;
-import com.helger.commons.debug.GlobalDebug;
 import com.helger.commons.equals.EqualsHelper;
 import com.helger.commons.exception.InitializationException;
 import com.helger.commons.http.CHttpHeader;
@@ -228,6 +226,181 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     return sParticipantID + "-" + sDocTypeID;
   }
 
+  private static final class DirectoryMatch
+  {
+    private IParticipantIdentifier participantID;
+    private IDocumentTypeIdentifier docTypeID;
+    private List <EntityType> entity;
+  }
+
+  private static final class DirectoryResults
+  {
+    final ICommonsMap <String, List <DirectoryMatch>> m_aDirectoryResults = new CommonsHashMap <> ();
+
+    private DirectoryResults ()
+    {}
+
+    public boolean isEmpty ()
+    {
+      return m_aDirectoryResults.isEmpty ();
+    }
+
+    @Nonnegative
+    public int size ()
+    {
+      return m_aDirectoryResults.size ();
+    }
+
+    @Nonnegative
+    public int getMatchCount ()
+    {
+      int ret = 0;
+      for (final List <DirectoryMatch> aMatches : m_aDirectoryResults.values ())
+        ret += aMatches.size ();
+      return ret;
+    }
+
+    @Nonnull
+    public Set <Map.Entry <String, List <DirectoryMatch>>> entrySet ()
+    {
+      return m_aDirectoryResults.entrySet ();
+    }
+
+    public void keepOnlyMatchesForCountryCode (@Nonnull final String sLogPrefix, @Nonnull final String sCountryCode)
+    {
+      ValueEnforcer.isTrue (sCountryCode.length () == 2, "Invalid country code");
+
+      for (final Map.Entry <String, List <DirectoryMatch>> aEntry : new CommonsArrayList <> (m_aDirectoryResults.entrySet ()))
+      {
+        final List <DirectoryMatch> aMatches = aEntry.getValue ();
+
+        // Work on a copy
+        for (final DirectoryMatch aMatch : new CommonsArrayList <> (aMatches))
+        {
+          // Work on a copy
+          for (final EntityType aEntity : new CommonsArrayList <> (aMatch.entity))
+          {
+            // Filter out invalid country codes
+            if (!EqualsHelper.equals (aEntity.getCountryCode (), sCountryCode))
+            {
+              if (LOGGER.isDebugEnabled ())
+                LOGGER.debug (sLogPrefix +
+                              "Skipping Entity, because it doesn't match country code '" +
+                              sCountryCode +
+                              "' (has '" +
+                              aEntity.getCountryCode () +
+                              "')");
+              aMatch.entity.remove (aEntity);
+            }
+          }
+
+          if (aMatch.entity.isEmpty ())
+          {
+            if (LOGGER.isDebugEnabled ())
+              LOGGER.debug (sLogPrefix + "Entity List of match is now empty - removing the match");
+            aMatches.remove (aMatch);
+          }
+        }
+
+        if (aMatches.isEmpty ())
+        {
+          LOGGER.info (sLogPrefix + "Match List is now empty - removing the result entry");
+          m_aDirectoryResults.remove (aEntry.getKey ());
+        }
+      }
+    }
+
+    @Nonnull
+    public static DirectoryResults createQueryingDirectory (@Nonnull final String sLogPrefix,
+                                                            @Nonnull final ICommonsOrderedSet <String> aCOTIDs)
+    {
+      final DirectoryResults ret = new DirectoryResults ();
+      try (final HttpClientManager aHCM = HttpClientManager.create (new IALHttpClientSettings ()))
+      {
+        for (final String sCOTID : aCOTIDs)
+        {
+          // Build base URL and fetch all records per HTTP request
+          final SimpleURL aBaseURL = new SimpleURL (IALConfig.Directory.getBaseURL () + "/search/1.0/xml");
+          // More than 1000 is not allowed
+          aBaseURL.add ("rpc", 1000);
+          aBaseURL.add ("doctype", sCOTID);
+
+          // Don't add the country code to the URL, because it would use an "OR"
+          // on DocType and CountryCode, but we need an "AND"
+
+          LOGGER.info (sLogPrefix + "Querying Directory for DocTypeID '" + sCOTID + "'");
+
+          // Main client call
+          try
+          {
+            final HttpGet aGet = new HttpGet (aBaseURL.getAsStringWithEncodedParameters ());
+            final Document aResponseXML = aHCM.execute (aGet, new ResponseHandlerXml (false));
+
+            // Parse result
+            final ResultListType aDirectoryResultList = PDSearchAPIReader.resultListV1 ().read (aResponseXML);
+            if (aDirectoryResultList != null)
+            {
+              if (aDirectoryResultList.hasMatchEntries ())
+              {
+                // Remove all other DocumentTypes then the queried one
+                final ICommonsList <DirectoryMatch> aLocalMatches = new CommonsArrayList <> (aDirectoryResultList.getMatchCount ());
+                for (final MatchType m : aDirectoryResultList.getMatch ())
+                {
+                  // Make sure the queried Document Type is contained
+                  for (final IDType id : new CommonsArrayList <> (m.getDocTypeID ()))
+                  {
+                    final String sCurID = CIdentifier.getURIEncoded (id.getScheme (), id.getValue ());
+                    if (!sCurID.matches (sCOTID))
+                      m.getDocTypeID ().remove (id);
+                  }
+                  if (m.hasNoDocTypeIDEntries ())
+                    throw new IllegalStateException ("No document type left after filtering - weird");
+                  if (m.getDocTypeIDCount () != 1)
+                    throw new IllegalStateException ("Not exactly 1 document type left but " + m.getDocTypeIDCount ());
+
+                  // Use simplified match data type
+                  final DirectoryMatch dm = new DirectoryMatch ();
+                  dm.participantID = IF.createParticipantIdentifier (m.getParticipantID ().getScheme (),
+                                                                     m.getParticipantID ().getValue ());
+                  dm.docTypeID = IF.createDocumentTypeIdentifier (m.getDocTypeIDAtIndex (0).getScheme (),
+                                                                  m.getDocTypeIDAtIndex (0).getValue ());
+                  dm.entity = m.getEntity ();
+                  aLocalMatches.add (dm);
+                }
+                ret.m_aDirectoryResults.put (sCOTID, aLocalMatches);
+              }
+              else
+                LOGGER.warn (sLogPrefix + "Search results have no matches");
+            }
+            else
+            {
+              LOGGER.error (sLogPrefix + "Failed to parse Directory result as XML");
+            }
+          }
+          catch (final ExtendedHttpResponseException ex)
+          {
+            LOGGER.error (sLogPrefix + "Failed to query remote Directory", ex);
+          }
+        }
+      }
+      catch (final IOException ex)
+      {
+        throw new UncheckedIOException (ex);
+      }
+      catch (final GeneralSecurityException ex)
+      {
+        throw new IllegalStateException (ex);
+      }
+      return ret;
+    }
+  }
+
+  private static class ResponseMatch
+  {
+    private IParticipantIdentifier participantID;
+    private EntityType entity;
+  }
+
   public final void invokeAPI (@Nonnull final IAPIDescriptor aAPIDescriptor,
                                @Nonnull @Nonempty final String sPath,
                                @Nonnull final Map <String, String> aPathVariables,
@@ -272,51 +445,27 @@ public class ApiGetGetAllDOs implements IAPIExecutor
                                             aRequestScope);
     }
 
-    // Perform Directory queries
-    final ICommonsMap <String, List <MatchType>> aDirectoryResults = new CommonsHashMap <> ();
-    try (final HttpClientManager aHCM = HttpClientManager.create (new IALHttpClientSettings ()))
+    // Perform Directory queries for each Canonical Object Type
+    final DirectoryResults aDirectoryResults = DirectoryResults.createQueryingDirectory (sLogPrefix, aCOTIDs);
+    int nMatchCount = aDirectoryResults.getMatchCount ();
+    LOGGER.info (sLogPrefix + "The Directory query returned " + nMatchCount + " matches");
+    if (m_bWithATUCode)
     {
-      for (final String sCOTID : aCOTIDs)
-      {
-        // Build base URL and fetch all records per HTTP request
-        final SimpleURL aBaseURL = new SimpleURL (IALConfig.Directory.getBaseURL () + "/search/1.0/xml");
-        // More than 1000 is not allowed
-        aBaseURL.add ("rpc", 100);
-        aBaseURL.add ("doctype", sCOTID);
-
-        // Don't add the country code to the URL, because it would use an "OR"
-        // on DocType and CountryCode, but we need an "AND"
-
-        LOGGER.info (sLogPrefix + "Querying Directory for DocTypeID '" + sCOTID + "'");
-
-        // Main client call
-        try
-        {
-          final HttpGet aGet = new HttpGet (aBaseURL.getAsStringWithEncodedParameters ());
-          final Document aResponseXML = aHCM.execute (aGet, new ResponseHandlerXml (false));
-
-          // Parse result
-          final ResultListType aResultList = PDSearchAPIReader.resultListV1 ().read (aResponseXML);
-          if (aResultList != null)
-          {
-            if (aResultList.hasMatchEntries ())
-              aDirectoryResults.put (sCOTID, aResultList.getMatch ());
-            else
-              LOGGER.warn (sLogPrefix + "Search results have no matches");
-          }
-          else
-          {
-            LOGGER.error (sLogPrefix + "Failed to parse Directory result as XML");
-          }
-        }
-        catch (final ExtendedHttpResponseException ex)
-        {
-          LOGGER.error (sLogPrefix + "Failed to query remote Directory", ex);
-        }
-      }
+      // Remove all entities with the wrong country code
+      final String sCountryCode = sAtuCode.substring (0, 2);
+      LOGGER.info (sLogPrefix + "Start filtering results by country code '" + sCountryCode + "'");
+      aDirectoryResults.keepOnlyMatchesForCountryCode (sLogPrefix, sCountryCode);
+      final int nNewMatchCount = aDirectoryResults.getMatchCount ();
+      LOGGER.info (sLogPrefix +
+                   "The match count was reduced from " +
+                   nMatchCount +
+                   " to " +
+                   nNewMatchCount +
+                   " after country matching");
+      nMatchCount = nNewMatchCount;
     }
 
-    final ResponseLookupRoutingInformationType aResponse = new ResponseLookupRoutingInformationType ();
+    final ResponseLookupRoutingInformationType aQueryResponse = new ResponseLookupRoutingInformationType ();
     if (aDirectoryResults.isEmpty ())
     {
       LOGGER.warn (sLogPrefix + "Found no matches in the Directory");
@@ -325,191 +474,165 @@ public class ApiGetGetAllDOs implements IAPIExecutor
     {
       LOGGER.info (sLogPrefix + "Collected Directory results: " + aDirectoryResults);
 
-      // Group by COT and Country Code
-      final ICommonsMap <String, ICommonsMap <String, ICommonsList <MatchType>>> aGroupedMap = new CommonsTreeMap <> ();
+      // Group by COT, then Country Code
+      final ICommonsMap <String, ICommonsMap <String, ICommonsList <ResponseMatch>>> aGroupedMap = new CommonsTreeMap <> ();
       final StopWatch aSWGrouping = StopWatch.createdStarted ();
-      final AtomicInteger aSMPCallCount = new AtomicInteger (0);
-      for (final Map.Entry <String, List <MatchType>> aEntry : aDirectoryResults.entrySet ())
+      int nCacheHitCount = 0;
+      int nSMPCallCount = 0;
+      for (final Map.Entry <String, List <DirectoryMatch>> aEntry : aDirectoryResults.entrySet ())
       {
-        final String sCOT = aEntry.getKey ();
+        final String sDocTypeID = aEntry.getKey ();
+        final String sLogPrefix2 = sLogPrefix + "[" + sDocTypeID + "] ";
 
-        // Map from country code to list of matches
-        final ICommonsMap <String, ICommonsList <MatchType>> aMapByCOT = aGroupedMap.computeIfAbsent (sCOT,
-                                                                                                      k -> new CommonsTreeMap <> ());
-
-        for (final MatchType aMatch : aEntry.getValue ())
+        // Map from Country Code to list of ResponseMatch
+        final ICommonsMap <String, ICommonsList <ResponseMatch>> aMapByCOTs = aGroupedMap.computeIfAbsent (sDocTypeID,
+                                                                                                           k -> new CommonsTreeMap <> ());
+        for (final DirectoryMatch aMatch : aEntry.getValue ())
         {
-          if (aMatch.hasNoDocTypeIDEntries ())
+          // Check, if any of the document types
+          ETriState eMatchState = ETriState.UNDEFINED;
+
+          // Query in cache first
+          final ETriState eCacheState = IALCache.getState (aMatch.participantID, aMatch.docTypeID);
+          if (eCacheState != ETriState.UNDEFINED)
           {
-            LOGGER.info (sLogPrefix +
+            // Use from cache
+            eMatchState = eCacheState;
+            nCacheHitCount++;
+          }
+          else
+          {
+            // Query service metadata for this Participant
+            final BDXRClientReadOnly aSMPClient = new BDXRClientReadOnly (BDXLURLProvider.INSTANCE,
+                                                                          aMatch.participantID,
+                                                                          SML_INFO);
+            aSMPClient.httpClientSettings ().setAllFrom (new IALHttpClientSettings ());
+            aSMPClient.setTrustStore (SMP_TRUSTSTORE);
+
+            // Run the main action asynchronously
+            try
+            {
+              nSMPCallCount++;
+
+              LOGGER.info (sLogPrefix2 +
+                           "Now performing SMP query '" +
+                           aMatch.participantID.getURIEncoded () +
+                           "' / '" +
+                           aMatch.docTypeID.getURIEncoded () +
+                           "' on '" +
+                           aSMPClient.getSMPHostURI () +
+                           "'");
+
+              // SMP query
+              final SignedServiceMetadataType aSM = aSMPClient.getServiceMetadataOrNull (aMatch.participantID,
+                                                                                         aMatch.docTypeID);
+              if (aSM != null &&
+                  aSM.getServiceMetadata () != null &&
+                  aSM.getServiceMetadata ().getServiceInformation () != null)
+              {
+                // Only allow SMP entries that have a certain process
+                // identifier
+                for (final ProcessType aProc : aSM.getServiceMetadata ()
+                                                  .getServiceInformation ()
+                                                  .getProcessList ()
+                                                  .getProcess ())
+                {
+                  final String sProcIDScheme = aProc.getProcessIdentifier ().getScheme ();
+                  final String sProcIDValue = aProc.getProcessIdentifier ().getValue ();
+
+                  // As we only want to find Data Providers, they need to
+                  // have registered the "request" process ID
+                  if ("urn:de4a-eu:MessageType".equals (sProcIDScheme) && "request".equals (sProcIDValue))
+                  {
+                    LOGGER.info (sLogPrefix2 +
+                                 "Found matching process ID '" +
+                                 CIdentifier.getURIEncoded (sProcIDScheme, sProcIDValue) +
+                                 "'");
+
+                    // First match is enough for us, to continue with the
+                    // participant
+                    eMatchState = ETriState.TRUE;
+                    break;
+                  }
+
+                  if (LOGGER.isDebugEnabled ())
+                    LOGGER.debug (sLogPrefix2 +
+                                  "Skipping process ID '" +
+                                  CIdentifier.getURIEncoded (sProcIDScheme, sProcIDValue) +
+                                  "' because it is not relevant");
+                }
+
+                if (eMatchState.isUndefined ())
+                  eMatchState = ETriState.FALSE;
+              }
+            }
+            catch (final Exception ex)
+            {
+              LOGGER.error (sLogPrefix2 +
+                            "Failed to query SMP: " +
+                            ex.getClass ().getName () +
+                            " - " +
+                            ex.getMessage ());
+
+              // Don't cache in case of exception
+              eMatchState = ETriState.UNDEFINED;
+            }
+
+            // Remember SMP query result in Cache
+            if (eMatchState.isDefined ())
+              IALCache.cacheState (aMatch.participantID, aMatch.docTypeID, eMatchState.isTrue ());
+          }
+
+          if (eMatchState.isUndefined ())
+          {
+            // Continue with next Match for the current COT
+            LOGGER.info (sLogPrefix2 +
                          "Skipping result for '" +
-                         aMatch.getParticipantIDValue () +
-                         "' because no document types are present.");
+                         aMatch.participantID.getURIEncoded () +
+                         "' because no matching process ID was found.");
             continue;
           }
 
-          // Check, if any of the document types in
+          // Build result entities
+          for (final EntityType aEntity : aMatch.entity)
           {
-            final AtomicBoolean aAnyDocumentTypeSupportsRequest = new AtomicBoolean (false);
-            final IParticipantIdentifier aParticipantID = IF.createParticipantIdentifier (aMatch.getParticipantID ()
-                                                                                                .getScheme (),
-                                                                                          aMatch.getParticipantID ()
-                                                                                                .getValue ());
-
-            // Start parallel SMP queries
-
-            // Avoid creating SMP client initially, if everything is in the
-            // cache to avoid the DNS NAPTR lookup
-            BDXRClientReadOnly aSMPClient = null;
-            final ExecutorService aES = Executors.newFixedThreadPool (GlobalDebug.isProductionMode () ? 4 : 2);
-
-            for (final IDType aDocTypeID : aMatch.getDocTypeID ())
-            {
-              // Query all service metadata for this Participant
-              final IDocumentTypeIdentifier aDocumentTypeID = IF.createDocumentTypeIdentifier (aDocTypeID.getScheme (),
-                                                                                               aDocTypeID.getValue ());
-
-              final ETriState eState = IALCache.getState (aParticipantID, aDocumentTypeID);
-              if (eState != ETriState.UNDEFINED)
-              {
-                // Use from cache
-                aAnyDocumentTypeSupportsRequest.set (eState.getAsBooleanValue ());
-              }
-              else
-              {
-                if (aSMPClient == null)
-                {
-                  // Lazily create SMP client
-                  aSMPClient = new BDXRClientReadOnly (BDXLURLProvider.INSTANCE, aParticipantID, SML_INFO);
-                  aSMPClient.httpClientSettings ().setAllFrom (new IALHttpClientSettings ());
-                  aSMPClient.setTrustStore (SMP_TRUSTSTORE);
-                }
-                final BDXRClientReadOnly aFinalSMPClient = aSMPClient;
-
-                aES.submit ( () -> {
-                  try
-                  {
-                    aSMPCallCount.incrementAndGet ();
-
-                    // SMP query
-                    final SignedServiceMetadataType aSM = aFinalSMPClient.getServiceMetadataOrNull (aParticipantID,
-                                                                                                    aDocumentTypeID);
-                    if (aSM != null &&
-                        aSM.getServiceMetadata () != null &&
-                        aSM.getServiceMetadata ().getServiceInformation () != null)
-                    {
-                      // Only allow SMP entries that have a certain process
-                      // identifier
-                      for (final ProcessType aProc : aSM.getServiceMetadata ()
-                                                        .getServiceInformation ()
-                                                        .getProcessList ()
-                                                        .getProcess ())
-                      {
-                        if ("urn:de4a-eu:MessageType".equals (aProc.getProcessIdentifier ().getScheme ()) &&
-                            "request".equals (aProc.getProcessIdentifier ().getValue ()))
-                        {
-                          LOGGER.info (sLogPrefix +
-                                       "Found matching process ID '" +
-                                       CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
-                                                                  aProc.getProcessIdentifier ().getValue ()) +
-                                       "'");
-
-                          // First match is enough for us, to continue with the
-                          // participant
-                          aAnyDocumentTypeSupportsRequest.set (true);
-                          break;
-                        }
-                        if (LOGGER.isDebugEnabled ())
-                          LOGGER.debug (sLogPrefix +
-                                        "Skipping process ID '" +
-                                        CIdentifier.getURIEncoded (aProc.getProcessIdentifier ().getScheme (),
-                                                                   aProc.getProcessIdentifier ().getValue ()) +
-                                        "'");
-                      }
-                    }
-                  }
-                  catch (final Exception ex)
-                  {
-                    LOGGER.error (sLogPrefix +
-                                  "Failed to query SMP: " +
-                                  ex.getClass ().getName () +
-                                  " - " +
-                                  ex.getMessage ());
-                  }
-
-                  // Remember SMP query result in Cache
-                  IALCache.cacheState (aParticipantID, aDocumentTypeID, aAnyDocumentTypeSupportsRequest.get ());
-                });
-              }
-            }
-
-            // Synchronize all parallel activities
-            ExecutorServiceHelper.shutdownAndWaitUntilAllTasksAreFinished (aES, 100, TimeUnit.MILLISECONDS);
-
-            if (!aAnyDocumentTypeSupportsRequest.get ())
-            {
-              LOGGER.info (sLogPrefix +
-                           "Skipping result for '" +
-                           aMatch.getParticipantIDValue () +
-                           "' because no matching process ID was found.");
-              continue;
-            }
-          }
-
-          for (final EntityType aEntity : aMatch.getEntity ())
-          {
-            if (m_bWithATUCode)
-            {
-              // Filter out invalid country codes
-              final String sCountryCode = sAtuCode.substring (0, 2);
-              if (!EqualsHelper.equals (aEntity.getCountryCode (), sCountryCode))
-              {
-                LOGGER.info (sLogPrefix +
-                             "Skipping Entity, because it doesn't match country code '" +
-                             sCountryCode +
-                             "' (has '" +
-                             aEntity.getCountryCode () +
-                             "')");
-                continue;
-              }
-            }
-
             // New match with only one Entity
-            final MatchType aSubMatch = aMatch.clone ();
-            aSubMatch.getEntity ().clear ();
-            aSubMatch.addEntity (aEntity);
-
-            aMapByCOT.computeIfAbsent (aEntity.getCountryCode (), k -> new CommonsArrayList <> ()).add (aSubMatch);
+            final ResponseMatch aResponseMatch = new ResponseMatch ();
+            aResponseMatch.participantID = aMatch.participantID;
+            aResponseMatch.entity = aEntity;
+            aMapByCOTs.computeIfAbsent (aEntity.getCountryCode (), k -> new CommonsArrayList <> ())
+                      .add (aResponseMatch);
           }
         }
       }
       aSWGrouping.stop ();
       LOGGER.info (sLogPrefix +
                    "Grouping with " +
-                   aSMPCallCount.intValue () +
-                   " SMP queries took " +
+                   nCacheHitCount +
+                   " cache hits and " +
+                   nSMPCallCount +
+                   " SMP queries - took " +
                    aSWGrouping.getMillis () +
                    " milliseconds in total");
 
       // fill IAL response data types
-      for (final Map.Entry <String, ICommonsMap <String, ICommonsList <MatchType>>> aEntry : aGroupedMap.entrySet ())
+      for (final Map.Entry <String, ICommonsMap <String, ICommonsList <ResponseMatch>>> aEntry : aGroupedMap.entrySet ())
       {
         // One result item per COT
         final ResponseItemType aItem = new ResponseItemType ();
         aItem.setCanonicalObjectTypeId (aEntry.getKey ());
 
         // Iterate per Country
-        for (final Map.Entry <String, ICommonsList <MatchType>> aEntry2 : aEntry.getValue ().entrySet ())
+        for (final Map.Entry <String, ICommonsList <ResponseMatch>> aEntry2 : aEntry.getValue ().entrySet ())
         {
           // One result per Country
           final String sCountryCode = aEntry2.getKey ();
           final ResponsePerCountryType aPerCountry = new ResponsePerCountryType ();
           aPerCountry.setCountryCode (sCountryCode);
 
-          for (final MatchType aMatch : aEntry2.getValue ())
+          for (final ResponseMatch aMatch : aEntry2.getValue ())
           {
-            ValueEnforcer.isTrue ( () -> aMatch.getEntityCount () == 1, "Entity mismatch");
-            final EntityType aEntity = aMatch.getEntityAtIndex (0);
+            final EntityType aEntity = aMatch.entity;
 
             // Check if this Entity has a specific "atuCode" defined
             String sMatchAtuCode = CollectionHelper.findFirstMapped (aEntity.getIdentifier (),
@@ -525,8 +648,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
             if (m_bWithATUCode)
             {
               // Only take results that are on the same ATU level as the
-              // requested
-              // on
+              // requested on
               if (!sMatchAtuCode.startsWith (sAtuCode))
               {
                 LOGGER.info (sLogPrefix +
@@ -592,9 +714,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
             aProvision.setAtuLevel (eMatchAtuLevel);
             aProvision.setAtuCode (sMatchAtuCode);
             aProvision.setAtuLatinName (sMatchAtuName);
-            aProvision.setDataOwnerId (aMatch.getParticipantID ().getScheme () +
-                                       "::" +
-                                       aMatch.getParticipantIDValue ());
+            aProvision.setDataOwnerId (aMatch.participantID.getScheme () + "::" + aMatch.participantID.getValue ());
             aProvision.setDataOwnerPrefLabel (aEntity.getNameAtIndex (0).getValue ());
 
             if (StringHelper.hasText (aEntity.getAdditionalInfo ()))
@@ -652,18 +772,19 @@ public class ApiGetGetAllDOs implements IAPIExecutor
             aItem.addResponsePerCountry (aPerCountry);
         }
         if (aItem.hasResponsePerCountryEntries ())
-          aResponse.addResponseItem (aItem);
+          aQueryResponse.addResponseItem (aItem);
       }
     }
 
-    if (aResponse.hasNoResponseItemEntries ())
+    if (aQueryResponse.hasNoResponseItemEntries ())
+
     {
       // One error is required to fulfill the XSD requirements
-      aResponse.addError (_createError ("no-match",
-                                        "Found NO matches searching for '" +
-                                                    sCOTIDs +
-                                                    "'" +
-                                                    (m_bWithATUCode ? " and ATU code '" + sAtuCode + "'" : "")));
+      aQueryResponse.addError (_createError ("no-match",
+                                             "Found NO matches searching for '" +
+                                                         sCOTIDs +
+                                                         "'" +
+                                                         (m_bWithATUCode ? " and ATU code '" + sAtuCode + "'" : "")));
     }
 
     final AcceptMimeTypeList aAccept = RequestHelper.getAcceptMimeTypes (aRequestScope.getRequest ());
@@ -674,7 +795,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
         LOGGER.debug (sLogPrefix + "Rendering response as JSON");
 
       // fill JSON
-      aPUR.json (getAsJson (aResponse));
+      aPUR.json (getAsJson (aQueryResponse));
     }
     else
     {
@@ -684,7 +805,7 @@ public class ApiGetGetAllDOs implements IAPIExecutor
 
       final byte [] aXML = IALMarshaller.responseLookupRoutingInformationMarshaller ()
                                         .formatted ()
-                                        .getAsBytes (aResponse);
+                                        .getAsBytes (aQueryResponse);
       if (aXML == null)
         throw new IALInternalErrorException ("Failed to serialize IAL XML response");
 
