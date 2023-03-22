@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 DE4A, www.de4a.eu
+ * Copyright (C) 2022-2023 DE4A, www.de4a.eu
  * Author: philip[at]helger[dot]com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
