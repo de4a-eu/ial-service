@@ -2,10 +2,8 @@
 
 DE4A IAL Service
 
-This service will replace the Mock IAL in Iteration 2 only.
-This code will not be used by Iteration 1 code.
-
-Work in progress
+The application in this repository represents the central DE4A IAL.
+It uses the DE4A Directory as the backing data storage.
 
 ## Submodules
 
@@ -88,6 +86,8 @@ Available country codes (case sensitive):
 
 ## News and Noteworthy
 
+* v0.1.12 - 2023-04-04
+    * Updated the license information to the final version
 * v0.1.11 - 2023-02-25
     * Fixed the result match making of `/api/provision` calls - corrected and more efficient
 * v0.1.10 - 2022-12-15
