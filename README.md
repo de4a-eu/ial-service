@@ -5,6 +5,8 @@ DE4A IAL Service
 The application in this repository represents the central DE4A IAL.
 It uses the DE4A Directory as the backing data storage.
 
+This project is licensed under the Apache 2.0 license.
+
 ## Submodules
 
 This project consists of the following submodules:
